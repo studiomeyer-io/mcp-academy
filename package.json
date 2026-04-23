@@ -1,0 +1,46 @@
+{
+  "name": "mcp-academy",
+  "version": "0.1.0",
+  "description": "MCP server for StudioMeyer Academy — next lesson, quiz, review, certificates, tutor — from Claude Code, Cursor, Claude Desktop.",
+  "type": "module",
+  "bin": {
+    "mcp-academy": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build",
+    "dev": "tsx src/index.ts"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "studiomeyer",
+    "academy",
+    "education",
+    "claude"
+  ],
+  "author": "StudioMeyer <info@studiomeyer.io>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/studiomeyer-io/mcp-academy.git"
+  },
+  "homepage": "https://academy.studiomeyer.io",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.20.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
