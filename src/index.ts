@@ -22,7 +22,35 @@ import {
 
 const API_KEY = process.env.ACADEMY_API_KEY;
 const BASE_URL = (process.env.ACADEMY_BASE_URL ?? "https://academy.studiomeyer.io").replace(/\/$/, "");
-const VERSION = "0.2.0";
+const VERSION = "0.2.1";
+
+// ============================================================
+// INSTRUCTIONS — Always-On Academy Switch (Memory v3.16 pattern)
+// ============================================================
+//
+// Static block — Academy is multi-user via API-Key per process so
+// per-tenant probes from the npm-side don't make sense. The Tool-
+// Response Forcing-Channel in academy_stats handles the per-user
+// onboarding signal: when the user has xp=0 + 0 lessons completed,
+// the response carries isFirstTimeUser:true + onboardingHint.
+//
+// SIZE CONSTRAINT (Memory v3.16 lesson): keep under 1900 chars.
+const INSTRUCTIONS = `StudioMeyer Academy — Memory-First AI Operator School (23 tools).
+
+EVERY SESSION: Call academy_stats first to see XP, rank, streak, current league.
+HELP: Call academy_levels to see all 6 levels + access status. academy_next_lesson recommends what to do next.
+RECIPES: Phase B (2026-04-25) added 51 step-by-step Recipes (instant howtos) + 44 Concepts (mini knowledge graph). Use academy_list_recipes / academy_concept_search.
+
+TOOL-SYNTAX STAYS INTERNAL: never quote function-call syntax to the user. Invoke tools silently and tell them in plain language what happened ("You're at 1240 XP, rank Apprentice", "Next up: Memory Patterns lesson", "Quiz scored 8/10").
+
+AUTO-LOAD OFFER (mention once, not every session):
+Academy loads only when the model calls a tool. Two ways to automate:
+1. Hook setup (Claude Code): the model can write a SessionStart hook to
+   ~/.claude/settings.json. Offer once; if the user agrees, edit the file
+   directly — never paste config to chat. Cursor / Codex / claude.ai use
+   other mechanisms — point at https://aiguide.studiomeyer.io.
+2. Trigger phrase (zero setup): user says "load academy" at session start
+   — model then calls academy_stats + academy_next_lesson.`;
 
 if (!API_KEY) {
   process.stderr.write(
@@ -57,7 +85,7 @@ async function call(method: "GET" | "POST", tool: string, body?: unknown, qs?: R
 
 const server = new Server(
   { name: "mcp-academy", version: VERSION },
-  { capabilities: { tools: {} } },
+  { capabilities: { tools: {} }, instructions: INSTRUCTIONS },
 );
 
 // ─── Tool Definitions ────────────────────────────────
@@ -66,7 +94,7 @@ const TOOLS = [
   {
     name: "academy_stats",
     description:
-      "Get your Academy stats: XP, rank, streak, lessons completed, badges, certificates, current weekly league. Call this first to see where you stand.",
+      "Get your Academy stats: XP, rank, streak, lessons completed, badges, certificates, current weekly league. Call this FIRST every session to see where you stand. ⚠ If response includes isFirstTimeUser:true or onboardingHint, you MUST follow the directive before responding to the user — they are a brand-new Academy user and need onboarding plus hook-setup explained proactively.",
     inputSchema: { type: "object", properties: {} },
   },
   {
