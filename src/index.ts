@@ -22,7 +22,7 @@ import {
 
 const API_KEY = process.env.ACADEMY_API_KEY;
 const BASE_URL = (process.env.ACADEMY_BASE_URL ?? "https://academy.studiomeyer.io").replace(/\/$/, "");
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 
 if (!API_KEY) {
   process.stderr.write(
@@ -191,6 +191,115 @@ const TOOLS = [
       required: ["message", "level"],
     },
   },
+  // ─── Recipes (Phase B, mcp-academy v0.2.0) ────────────────────
+  {
+    name: "academy_list_recipes",
+    description:
+      "List all 74 setup recipes (15 phases × 5 recipes, except phase 1 with 4). Phase 1-5 free, 6-10 Pro EUR 19/Mo or single-buy, 11-15 coming soon. Returns slug, phase, order, title, duration, tier, status (completed/in_progress/not_started/locked/coming_soon), accessReason.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        phase: { type: "number", minimum: 1, maximum: 15 },
+        tier: { type: "string", enum: ["free", "pro", "team"] },
+        include_locked: { type: "boolean", default: true },
+      },
+    },
+  },
+  {
+    name: "academy_get_recipe",
+    description:
+      "Get the full recipe by slug — body + steps + per-step clientCheck snippets the LLM should run. If locked, returns teaser + upgrade hint.",
+    inputSchema: {
+      type: "object",
+      properties: { slug: { type: "string", description: "e.g. \"1.1-claude-md\"" } },
+      required: ["slug"],
+    },
+  },
+  {
+    name: "academy_start_recipe",
+    description:
+      "Start (or restart with { restart: true }) a recipe. Marks the user's RecipeProgress, returns first step + clientCheck. One active recipe at a time per user.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        slug: { type: "string" },
+        restart: { type: "boolean", default: false },
+      },
+      required: ["slug"],
+    },
+  },
+  {
+    name: "academy_next_step",
+    description:
+      "Get the user's current step on the active recipe — body + clientCheck if a validator is bound. No active recipe → null.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "academy_validate_step",
+    description:
+      "Validate the current step. SaaS server cannot stat user FS, so the response is one of: \"client_check_required\" (LLM runs the command from clientCheck, then calls again with manual:true), \"manual\" (advanced, manual:true), \"no_validator\" (step has no check, advance with manual:true), or recipeCompleted:true if last step.",
+    inputSchema: {
+      type: "object",
+      properties: { manual: { type: "boolean", default: false } },
+    },
+  },
+  {
+    name: "academy_my_recipes",
+    description:
+      "Recipe progress overview — active recipe, completed count per phase, accessible-but-not-started count, next recommended recipe.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "academy_save_recipe_note",
+    description:
+      "Save a personal note attached to a recipe (and optionally a step). Returns the noteId. Notes survive recipe restarts.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        recipeSlug: { type: "string" },
+        content: { type: "string", maxLength: 4000 },
+        step: { type: "number" },
+      },
+      required: ["recipeSlug", "content"],
+    },
+  },
+  // ─── Knowledge Graph (Phase B) ────────────────────────────────
+  {
+    name: "academy_concept_search",
+    description:
+      "Search 32 concepts (config files, features, MCP servers, OAuth/SaaS patterns, operator patterns) by query string. Trigram + fallback ILIKE. Pro/Team concepts return summary only for free users.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        q: { type: "string" },
+        limit: { type: "number", minimum: 1, maximum: 50, default: 20 },
+      },
+      required: ["q"],
+    },
+  },
+  {
+    name: "academy_concept_open",
+    description:
+      "Get a single concept + its outgoing/incoming relations + recent observations. Pro/Team concepts return body only for paid users.",
+    inputSchema: {
+      type: "object",
+      properties: { slug: { type: "string" } },
+      required: ["slug"],
+    },
+  },
+  {
+    name: "academy_concept_graph",
+    description:
+      "N-hop neighborhood graph for a concept. depth=2 default (1-3 allowed). Returns nodes + edges so the LLM can reason about related concepts.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        slug: { type: "string" },
+        depth: { type: "number", minimum: 1, maximum: 3, default: 2 },
+      },
+      required: ["slug"],
+    },
+  },
 ];
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
@@ -252,6 +361,44 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           message: String(args.message),
           level: Number(args.level),
           lessonSlug: args.lessonSlug ? String(args.lessonSlug) : undefined,
+        }));
+      // Recipes (Phase B)
+      case "academy_list_recipes":
+        return toText(await call("GET", "list-recipes", undefined, {
+          phase: args.phase ? Number(args.phase) : undefined,
+          tier: args.tier ? String(args.tier) : undefined,
+          include_locked: args.include_locked === false ? "false" : undefined,
+        }));
+      case "academy_get_recipe":
+        return toText(await call("GET", "get-recipe", undefined, { slug: String(args.slug) }));
+      case "academy_start_recipe":
+        return toText(await call("POST", "start-recipe", {
+          slug: String(args.slug),
+          restart: !!args.restart,
+        }));
+      case "academy_next_step":
+        return toText(await call("GET", "next-step"));
+      case "academy_validate_step":
+        return toText(await call("POST", "validate-step", { manual: !!args.manual }));
+      case "academy_my_recipes":
+        return toText(await call("GET", "my-recipes"));
+      case "academy_save_recipe_note":
+        return toText(await call("POST", "save-recipe-note", {
+          recipeSlug: String(args.recipeSlug),
+          content: String(args.content),
+          step: args.step != null ? Number(args.step) : undefined,
+        }));
+      case "academy_concept_search":
+        return toText(await call("GET", "concept-search", undefined, {
+          q: String(args.q),
+          limit: args.limit ? Number(args.limit) : undefined,
+        }));
+      case "academy_concept_open":
+        return toText(await call("GET", "concept-open", undefined, { slug: String(args.slug) }));
+      case "academy_concept_graph":
+        return toText(await call("GET", "concept-graph", undefined, {
+          slug: String(args.slug),
+          depth: args.depth ? Number(args.depth) : undefined,
         }));
       default:
         return {
