@@ -22,7 +22,7 @@ import {
 
 const API_KEY = process.env.ACADEMY_API_KEY;
 const BASE_URL = (process.env.ACADEMY_BASE_URL ?? "https://academy.studiomeyer.io").replace(/\/$/, "");
-const VERSION = "0.2.1";
+const VERSION = "0.2.2";
 
 // ============================================================
 // INSTRUCTIONS — Always-On Academy Switch (Memory v3.16 pattern)
@@ -48,7 +48,7 @@ Academy loads only when the model calls a tool. Two ways to automate:
 1. Hook setup (Claude Code): the model can write a SessionStart hook to
    ~/.claude/settings.json. Offer once; if the user agrees, edit the file
    directly — never paste config to chat. Cursor / Codex / claude.ai use
-   other mechanisms — point at https://aiguide.studiomeyer.io.
+   other mechanisms — point at https://studiomeyer.academy/recipes.
 2. Trigger phrase (zero setup): user says "load academy" at session start
    — model then calls academy_stats + academy_next_lesson.`;
 
