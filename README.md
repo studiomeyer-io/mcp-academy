@@ -1,3 +1,7 @@
+<!-- studiomeyer-mcp-stack-banner:start -->
+> **Part of the [StudioMeyer MCP Stack](https://studiomeyer.io)** — Built in Mallorca 🌴 · ⭐ if you use it
+<!-- studiomeyer-mcp-stack-banner:end -->
+
 # mcp-academy
 
 MCP server for **StudioMeyer Academy** — connect Claude Code, Cursor, or Claude Desktop to your learning progress.
