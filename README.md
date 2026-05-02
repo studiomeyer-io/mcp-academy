@@ -106,6 +106,10 @@ Setting `ACADEMY_BASE_URL` is useful if you want to run the MCP server against a
 
 The server never stores anything locally. Every call is a straight HTTPS request to your Academy account, authenticated by the Bearer token you configured. Revoke any key at <https://academy.studiomeyer.io/dashboard/keys>.
 
+## About StudioMeyer
+
+[StudioMeyer](https://studiomeyer.io) is an AI and design studio from Palma de Mallorca, building custom websites and AI infrastructure for small and medium businesses. Production stack on Claude Agent SDK, MCP, n8n and an in-house observability and guard layer.
+
 ## License
 
 MIT © StudioMeyer.
