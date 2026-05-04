@@ -33,7 +33,7 @@
   "homepage": "https://academy.studiomeyer.io",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.0",
-    "zod": "^3.25.76"
+    "zod": "^4.4.2"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
