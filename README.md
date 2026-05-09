@@ -4,7 +4,14 @@
 
 # mcp-academy
 
-MCP server for **StudioMeyer Academy** — connect Claude Code, Cursor, or Claude Desktop to your learning progress.
+
+<!-- badges -->
+[![npm version](https://img.shields.io/npm/v/mcp-academy?style=flat-square&color=cb3837&logo=npm&label=npm)](https://www.npmjs.com/package/mcp-academy)
+[![npm downloads](https://img.shields.io/npm/dm/mcp-academy?style=flat-square&color=cb3837&logo=npm&label=installs%2Fmo)](https://www.npmjs.com/package/mcp-academy)
+![License](https://img.shields.io/github/license/studiomeyer-io/mcp-academy?style=flat-square&color=22c55e&label=license)
+![Last commit](https://img.shields.io/github/last-commit/studiomeyer-io/mcp-academy?style=flat-square&color=88c0d0&label=updated)
+![GitHub stars](https://img.shields.io/github/stars/studiomeyer-io/mcp-academy?style=flat-square&color=ffd700&logo=github&label=stars)
+<!-- /badges -->MCP server for **StudioMeyer Academy** — connect Claude Code, Cursor, or Claude Desktop to your learning progress.
 
 - See where you are in the 6-level Memory-First AI Operator curriculum
 - Get the next lesson recommended based on your real progress
