@@ -1,6 +1,7 @@
 {
   "name": "mcp-academy",
-  "version": "0.2.2",
+  "version": "0.2.3",
+  "mcpName": "io.studiomeyer/academy",
   "description": "MCP server for StudioMeyer Academy — next lesson, quiz, review, certificates, tutor — from Claude Code, Cursor, Claude Desktop.",
   "type": "module",
   "bin": {
