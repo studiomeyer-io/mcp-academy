@@ -29,9 +29,7 @@
   ],
   "remotes": [
     {
-      "transport": {
-        "type": "streamable-http"
-      },
+      "type": "streamable-http",
       "url": "https://mcp.studiomeyer.academy/mcp"
     }
   ]
