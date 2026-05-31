@@ -1,0 +1,22 @@
+# mcp-academy public HTTP endpoint on Alt-Dev (mcp.studiomeyer.academy).
+# Anonymous, read-only, stateless. Bound to localhost; nginx terminates TLS + proxies.
+# Deployed via image-transfer from Dev2 (docker save | ssh | docker load) to dodge
+# the Hetzner Docker-bridge DNS edge-case on apt-get during on-host builds.
+
+services:
+  mcp-academy:
+    image: mcp-academy:altdev-s1262
+    container_name: mcp-academy
+    restart: unless-stopped
+    environment:
+      MCP_TRANSPORT: "http"
+      HOST: "0.0.0.0"
+      PORT: "3221"
+    ports:
+      - "127.0.0.1:3221:3221"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3221/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
