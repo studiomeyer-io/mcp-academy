@@ -1,21 +1,25 @@
 {
   "name": "mcp-academy",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "mcpName": "io.studiomeyer/academy",
-  "description": "MCP server for StudioMeyer Academy — next lesson, quiz, review, certificates, tutor — from Claude Code, Cursor, Claude Desktop.",
+  "description": "Free 'Memory-First AI Operator' course as an MCP server — take it inside Claude, Cursor, Codex or ChatGPT. Bundled curriculum (6 levels + playbooks + recipes), no account needed. Optional API key unlocks progress, quizzes, certificates.",
   "type": "module",
   "bin": {
     "mcp-academy": "./dist/index.js"
   },
   "files": [
     "dist",
+    "data",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "bundle": "node scripts/bundle-content.mjs",
     "prepublishOnly": "npm run build",
-    "dev": "tsx src/index.ts"
+    "dev": "tsx src/index.ts",
+    "start:http": "node dist/index.js --http",
+    "smoke": "node scripts/smoke-test.mjs"
   },
   "keywords": [
     "mcp",
@@ -23,7 +27,11 @@
     "studiomeyer",
     "academy",
     "education",
-    "claude"
+    "ai",
+    "claude",
+    "chatgpt",
+    "cursor",
+    "learning"
   ],
   "author": "StudioMeyer <info@studiomeyer.io>",
   "license": "MIT",
@@ -31,13 +39,13 @@
     "type": "git",
     "url": "git+https://github.com/studiomeyer-io/mcp-academy.git"
   },
-  "homepage": "https://academy.studiomeyer.io",
+  "homepage": "https://studiomeyer.academy",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.20.0",
-    "zod": "^3.25.76"
+    "@modelcontextprotocol/sdk": "^1.20.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "gray-matter": "^4.0.3",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   },

@@ -2,29 +2,37 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.studiomeyer/academy",
   "title": "StudioMeyer Academy",
-  "description": "AI Operator School: lessons, quizzes, reviews, certificates, tutor, recipes. 23 tools.",
+  "description": "Free Memory-First AI Operator course as an MCP server. Bundled curriculum (6 levels, lessons, playbooks, recipes) — no account needed. Optional API key unlocks progress, quizzes, certificates.",
   "repository": {
     "url": "https://github.com/studiomeyer-io/mcp-academy",
     "source": "github"
   },
-  "version": "0.2.3",
+  "version": "0.3.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "mcp-academy",
-      "version": "0.2.3",
+      "version": "0.3.0",
       "transport": {
         "type": "stdio"
       },
       "environmentVariables": [
         {
-          "description": "Academy API key generated at studiomeyer.academy/dashboard/keys (Bearer token for the REST bridge).",
-          "isRequired": true,
+          "description": "Optional. Personal Academy API key from studiomeyer.academy/dashboard/keys. Without it the server runs in free, account-free mode (full curriculum, no progress tracking). With it, adds progress/quizzes/certificates over stdio.",
+          "isRequired": false,
           "format": "string",
           "isSecret": true,
           "name": "ACADEMY_API_KEY"
         }
       ]
+    }
+  ],
+  "remotes": [
+    {
+      "transport": {
+        "type": "streamable-http"
+      },
+      "url": "https://mcp.studiomeyer.academy/mcp"
     }
   ]
 }
