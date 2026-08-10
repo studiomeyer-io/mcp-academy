@@ -106,7 +106,7 @@ export const PUBLIC_TOOLS: ToolDef[] = [
   {
     name: "academy_recipes",
     description:
-      "List build recipes — step-by-step guides to build, deploy and ship real MCP servers and agent systems, organised by phase (1-16). Optional phase filter.",
+      "List build recipes — step-by-step guides to build, deploy and ship real MCP servers and agent systems, organised by phase (1-16). Optional phase filter. Recipes are English-only (no locale parameter); lessons and playbooks exist in de/en/es.",
     inputSchema: {
       type: "object",
       properties: { phase: { type: "number", description: "Optional phase number 1-16" } },
@@ -114,7 +114,7 @@ export const PUBLIC_TOOLS: ToolDef[] = [
   },
   {
     name: "academy_recipe",
-    description: "Get the full text of one build recipe by slug.",
+    description: "Get the full text of one build recipe by slug. English-only — recipes are not translated.",
     inputSchema: {
       type: "object",
       properties: { slug: { type: "string" } },

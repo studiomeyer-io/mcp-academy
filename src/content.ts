@@ -25,7 +25,6 @@ export interface LessonItem {
   order: number;
   duration: string | null;
   tags: string[];
-  paid: boolean;
   body: string;
 }
 export interface PlaybookItem {
@@ -57,12 +56,19 @@ export interface RecipeItem {
 }
 export type ContentItem = LessonItem | PlaybookItem | RecipeItem;
 
+export interface LevelHeading {
+  level: number;
+  title: string;
+  subtitle: string;
+}
+
 interface Bundle {
   schema: number;
   generatedAt: string;
   source: string;
   license: string;
   counts: { lessons: number; playbooks: number; recipes: number };
+  levels: Record<Locale, LevelHeading[]>;
   lessons: LessonItem[];
   playbooks: PlaybookItem[];
   recipes: RecipeItem[];
@@ -118,28 +124,25 @@ export interface LevelInfo {
   level: number;
   title: string;
   subtitle: string;
-  paid: boolean;
   lessonCount: number;
 }
 
-// Level meta mirrors academy/src/lib/levels.ts (kept tiny + self-contained).
-const LEVEL_META: Record<number, { title: string; subtitle: string; paid: boolean }> = {
-  1: { title: "AI Foundations", subtitle: "What LLMs really do. Spotting hallucinations. Prompt basics.", paid: false },
-  2: { title: "Productive with AI", subtitle: "Using Claude, ChatGPT, Gemini well. Context, chain-thinking.", paid: false },
-  3: { title: "Simple Automation", subtitle: "Zapier, n8n, API basics. First mini-agents without code.", paid: false },
-  4: { title: "Memory-First Workflow", subtitle: "MCP protocol, persistent memory, hooks, skills. Portable across Claude, Cursor, Codex.", paid: true },
-  5: { title: "Multi-Agent Systems", subtitle: "CEO/Worker pattern, Critic, Research, Analyst. Cross-agent memory.", paid: true },
-  6: { title: "Full-Stack AI Systems", subtitle: "Build, deploy and sell your own MCP server. SaaS architecture.", paid: true },
-};
-
+/**
+ * Level headings come from the bundle, which bakes them from the website's own
+ * translation files. Until v0.4.0 they were a hardcoded English copy here, so
+ * academy_levels(locale:"de") returned German lessons under English headings.
+ *
+ * No `paid` field: the Academy is free since the S878 pivot. Advertising
+ * paid:true on a free course made clients withhold or mislabel L4-6.
+ */
 export function listLevels(locale: Locale): LevelInfo[] {
-  return [1, 2, 3, 4, 5, 6].map((level) => {
-    const meta = LEVEL_META[level];
-    const lessonCount = BUNDLE.lessons.filter(
-      (l) => l.level === level && l.locale === locale,
-    ).length;
-    return { level, title: meta.title, subtitle: meta.subtitle, paid: meta.paid, lessonCount };
-  });
+  const headings = BUNDLE.levels?.[locale] ?? BUNDLE.levels?.[DEFAULT_LOCALE] ?? [];
+  return headings.map((h) => ({
+    level: h.level,
+    title: h.title,
+    subtitle: h.subtitle,
+    lessonCount: BUNDLE.lessons.filter((l) => l.level === h.level && l.locale === locale).length,
+  }));
 }
 
 export function listLessons(level: number, locale: Locale) {

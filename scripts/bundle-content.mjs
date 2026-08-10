@@ -10,11 +10,18 @@
  * SOURCE  : ACADEMY_REPO/content/(de|en|es)/level-N/(file).mdx
  *           ACADEMY_REPO/content/(de|en|es)/playbooks/(file).mdx
  *           ACADEMY_REPO/content/recipes/phase-N/(file).mdx   (locale-agnostic, EN)
+ *           ACADEMY_REPO/messages/(de|en|es).json  -> ONLY the `levels` namespace,
+ *              and from it ONLY l<N>.title / l<N>.subtitle. This is the same SSOT
+ *              the website renders from (academy/src/lib/levels.ts + next-intl),
+ *              so level headings can never drift from the site again. Before v0.4.0
+ *              they were a hardcoded English copy in src/content.ts, which made
+ *              academy_levels(locale:"de") answer with English titles.
  * TARGET  : THIS_REPO/data/academy-content.json
  *
  * HARD RULES (this is a PUBLIC, open-source bundle — condition: no leaks):
- *   1. WHITELIST ONLY. We read exactly the three content roots above. Nothing
- *      else from the academy repo can ever end up in the bundle.
+ *   1. WHITELIST ONLY. We read exactly the four sources above — and from the
+ *      messages files exactly two string fields per level. Nothing else from
+ *      the academy repo can ever end up in the bundle.
  *   2. LEAK GATE. Every body + frontmatter value is scanned for real secrets.
  *      A real-looking secret aborts the build (exit 1). Teaching placeholders
  *      (xxx, <key>, secrets.X, your-..., example) are allowed.
@@ -33,6 +40,10 @@ import matter from "gray-matter";
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const CONTENT_DIR =
   process.env.ACADEMY_CONTENT_DIR || join(REPO_ROOT, "..", "academy", "content");
+// Whitelisted 4th source: the website's own translation files. Default sits next
+// to CONTENT_DIR so ACADEMY_CONTENT_DIR keeps working as the single knob.
+const MESSAGES_DIR =
+  process.env.ACADEMY_MESSAGES_DIR || join(CONTENT_DIR, "..", "messages");
 const OUT_FILE = join(REPO_ROOT, "data", "academy-content.json");
 
 const LOCALES = ["de", "en", "es"];
@@ -113,7 +124,7 @@ async function build() {
   }
   console.error(`[bundle] reading from ${CONTENT_DIR}`);
 
-  const out = { lessons: [], playbooks: [], recipes: [] };
+  const out = { levels: {}, lessons: [], playbooks: [], recipes: [] };
   let skippedPending = 0;
 
   for (const locale of LOCALES) {
@@ -127,12 +138,14 @@ async function build() {
         const where = `${locale}/level-${level}/${slug}`;
         scanForLeaks(where, content);
         scanForLeaks(where + "#fm", JSON.stringify(data));
+        // No `paid` field: the Academy is free since the S878 pivot
+        // (MONETIZATION_VISIBLE=false, access helpers return true for everyone).
+        // Shipping paid:true made clients tell users L4-6 costs money. Dropped in v0.4.0.
         out.lessons.push({
           id: `lesson:${locale}:${level}:${slug}`,
           type: "lesson",
           locale, level, slug,
           ...clean(data),
-          paid: Boolean(data.paid) || level >= 4, // L4-6 are the deep tiers (levels.ts)
           body: content.trim(),
         });
       }
@@ -184,6 +197,35 @@ async function build() {
     }
   }
 
+  // ── Level headings, per locale, straight from the website's translations ──
+  // Whitelist is deliberately narrow: namespace `levels`, keys l1..l6, fields
+  // title + subtitle. Anything else in messages/*.json is ignored by construction.
+  out.levels = {};
+  for (const locale of LOCALES) {
+    const file = join(MESSAGES_DIR, `${locale}.json`);
+    if (!existsSync(file)) {
+      console.error(`[bundle] FATAL: missing translations ${file}`);
+      console.error(`[bundle] set ACADEMY_MESSAGES_DIR=/path/to/academy/messages`);
+      process.exit(1);
+    }
+    const ns = JSON.parse(await readFile(file, "utf8")).levels;
+    if (!ns) {
+      console.error(`[bundle] FATAL: no "levels" namespace in ${file}`);
+      process.exit(1);
+    }
+    out.levels[locale] = LEVELS.map((level) => {
+      const entry = ns[`l${level}`];
+      const title = entry?.title;
+      const subtitle = entry?.subtitle;
+      if (typeof title !== "string" || typeof subtitle !== "string") {
+        console.error(`[bundle] FATAL: levels.l${level}.{title,subtitle} missing in ${file}`);
+        process.exit(1);
+      }
+      scanForLeaks(`messages/${locale}#l${level}`, `${title} ${subtitle}`);
+      return { level, title, subtitle };
+    });
+  }
+
   if (leaks.length > 0) {
     console.error(`\n[bundle] LEAK GATE FAILED — ${leaks.length} suspected secret(s):`);
     for (const l of leaks.slice(0, 20)) {
@@ -199,7 +241,8 @@ async function build() {
   out.recipes.sort((a, b) => a.phase - b.phase || a.order - b.order);
 
   const bundle = {
-    schema: 1,
+    // schema 2 (v0.4.0): `levels` added, `paid` removed from lessons.
+    schema: 2,
     generatedAt: process.env.BUNDLE_DATE || new Date().toISOString().slice(0, 10),
     source: "https://studiomeyer.academy",
     license: "course content (c) StudioMeyer — code MIT",

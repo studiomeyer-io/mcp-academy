@@ -12,9 +12,10 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, type CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { PUBLIC_TOOLS, handlePublicTool, PUBLIC_TOOL_NAMES } from "./public-tools.js";
-import { ACCOUNT_TOOLS, handleAccountTool, ACCOUNT_TOOL_NAMES } from "./account-tools.js";
+import { ACCOUNT_TOOLS, handleAccountTool, ACCOUNT_TOOL_NAMES, type BridgeAuth } from "./account-tools.js";
 
-export const VERSION = "0.3.0";
+// Must match package.json — smoke-test.mjs fails the build if it drifts.
+export const VERSION = "0.4.0";
 
 const INSTRUCTIONS = `StudioMeyer Academy — a free, 6-level "Memory-First AI Operator" course you can take right inside this chat.
 
@@ -24,17 +25,46 @@ HOW TO TEACH: use academy_levels -> academy_lessons -> academy_lesson (full text
 
 All course content is free and needs no account. (An optional ACADEMY_API_KEY unlocks personal progress, quizzes and certificates.)`;
 
-export function createServer(mode: "public" | "full"): Server {
+/** What the signed-in course adds on top of the reading instructions. */
+const SIGNED_IN_ADDENDUM = `
+
+THIS PERSON IS SIGNED IN. Alongside the lessons you also have their progress: academy_stats (XP, streak, where they stand), academy_next_lesson (what to do next — a good opener), academy_progress_complete when they finish one, academy_quiz + academy_quiz_submit to check understanding, academy_review for what is due again, academy_certificates, and academy_tutor for a question you cannot answer from the material.
+
+Use them like a tutor who remembers, not like a form: open by looking up where they left off, mark a lesson complete when they are actually done with it rather than asking them to confirm bookkeeping, and offer the quiz instead of demanding it.`;
+
+function instructionsFor(mode: ServerMode): string {
+  return typeof mode === "object" ? INSTRUCTIONS + SIGNED_IN_ADDENDUM : INSTRUCTIONS;
+}
+
+/**
+ * How this instance is being used:
+ *
+ *   "public"  the library. Curriculum reads from the bundle, nobody signed in.
+ *             `npx mcp-academy` with no key.
+ *   "full"    stdio with a personal ACADEMY_API_KEY (legacy).
+ *   an email  the hosted course, one signed-in person, one request.
+ *
+ * The hosted server builds a fresh instance per request, so the email never
+ * outlives the request that proved it.
+ */
+export type ServerMode = "public" | "full" | { courseFor: string };
+
+export function createServer(mode: ServerMode): Server {
   const apiKey = process.env.ACADEMY_API_KEY;
-  const fullMode = mode === "full" && !!apiKey;
+  const auth: BridgeAuth | null =
+    typeof mode === "object"
+      ? { kind: "oauth", email: mode.courseFor }
+      : mode === "full" && apiKey
+        ? { kind: "api_key", apiKey }
+        : null;
   // Public tools are all read-only — advertise it so ChatGPT's Company-Knowledge
   // surface can call them and clients can skip confirmation prompts.
   const publicTools = PUBLIC_TOOLS.map((t) => ({ ...t, annotations: { readOnlyHint: true } }));
-  const tools = fullMode ? [...publicTools, ...ACCOUNT_TOOLS] : [...publicTools];
+  const tools = auth ? [...publicTools, ...ACCOUNT_TOOLS] : [...publicTools];
 
   const server = new Server(
     { name: "mcp-academy", version: VERSION },
-    { capabilities: { tools: {} }, instructions: INSTRUCTIONS },
+    { capabilities: { tools: {} }, instructions: instructionsFor(mode) },
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
@@ -47,13 +77,16 @@ export function createServer(mode: "public" | "full"): Server {
       const r = await handlePublicTool(name, args);
       if (r !== null) return r;
     }
-    if (fullMode && apiKey && ACCOUNT_TOOL_NAMES.has(name)) {
-      const r = await handleAccountTool(apiKey, name, args);
+    if (auth && ACCOUNT_TOOL_NAMES.has(name)) {
+      const r = await handleAccountTool(auth, name, args);
       if (r !== null) return r;
     }
-    if (ACCOUNT_TOOL_NAMES.has(name) && !fullMode) {
+    if (ACCOUNT_TOOL_NAMES.has(name) && !auth) {
       return {
-        content: [{ type: "text" as const, text: `"${name}" needs an Academy account. Set ACADEMY_API_KEY (get one at https://studiomeyer.academy/dashboard/keys) and run over stdio.` }],
+        content: [{
+          type: "text" as const,
+          text: `"${name}" keeps track of you, so it needs an account. This is the offline library — connect the hosted course at https://mcp.studiomeyer.academy/mcp and sign in once (Google, Discord or a link by email). Everything you can read here stays free either way.`,
+        }],
         isError: true,
       };
     }

@@ -5,6 +5,12 @@
  */
 import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+const PKG_VERSION = JSON.parse(
+  readFileSync(fileURLToPath(new URL("../package.json", import.meta.url)), "utf8"),
+).version;
 
 const results = [];
 let failed = 0;
@@ -47,6 +53,13 @@ console.log("=== mcp-academy smoke test ===\n");
   ]);
   const init = msgs.find((m) => m.id === 1);
   check("public/init serverInfo", init?.result?.serverInfo?.name === "mcp-academy", "v" + init?.result?.serverInfo?.version);
+  // VERSION lives in src/server.ts as a constant; without this it silently drifts
+  // from package.json (it shipped 0.3.0 while package.json said 0.4.0).
+  check(
+    "version matches package.json",
+    init?.result?.serverInfo?.version === PKG_VERSION,
+    `server=${init?.result?.serverInfo?.version} package=${PKG_VERSION}`,
+  );
   check("public/init has instructions", typeof init?.result?.instructions === "string" && init.result.instructions.includes("academy_welcome"));
   const tools = msgs.find((m) => m.id === 2)?.result?.tools ?? [];
   const names = tools.map((t) => t.name);
@@ -88,40 +101,66 @@ console.log("=== mcp-academy smoke test ===\n");
 {
   const { msgs } = await rpcStdio({ ACADEMY_API_KEY: "" }, [INIT, INITED, callTool(9, "academy_stats", {})]);
   const r = msgs.find((m) => m.id === 9)?.result;
-  check("account tool w/o key guarded", r?.isError === true && r?.content?.[0]?.text?.includes("ACADEMY_API_KEY"));
+  check(
+    "account tool w/o key guarded",
+    r?.isError === true && /mcp\.studiomeyer\.academy/.test(r?.content?.[0]?.text ?? ""),
+    "points at the hosted course",
+  );
 }
 
-// 4) HTTP transport
-{
+// 4) HTTP transport — the hosted course. Needs Postgres (OAuth state lives
+// there and the server refuses to listen before it has rehydrated). Without a
+// database we say so out loud rather than quietly reporting all-green.
+if (!process.env.ACADEMY_MCP_DATABASE_URL && !process.env.DATABASE_URL) {
+  results.push("SKIP  http transport — set ACADEMY_MCP_DATABASE_URL to cover the course server");
+} else {
   const port = 8791;
-  const child = spawn("node", ["dist/index.js", "--http"], { env: { ...process.env, PORT: String(port), HOST: "127.0.0.1" }, stdio: ["ignore", "pipe", "pipe"] });
-  await sleep(700);
-  async function post(body) {
-    const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-      body: JSON.stringify(body),
-    });
-    const txt = await res.text();
-    let json = null;
-    try { json = JSON.parse(txt); } catch {
-      const line = txt.split("\n").find((l) => l.startsWith("data:"));
-      if (line) { try { json = JSON.parse(line.slice(5).trim()); } catch {} }
-    }
-    return { status: res.status, json, txt: txt.slice(0, 120) };
-  }
+  const child = spawn("node", ["dist/index.js", "--http"], {
+    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", ACADEMY_MCP_BASE_URL: `http://127.0.0.1:${port}` },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  await sleep(1500);
   try {
     const health = await fetch(`http://127.0.0.1:${port}/health`).then((r) => r.json());
-    check("http /health ok", health?.ok === true && health?.mode === "public", "v" + health?.version);
-    const init = await post(INIT);
-    check("http initialize ok", init.json?.result?.serverInfo?.name === "mcp-academy", "status " + init.status);
-    const tl = await post(listTools(2));
-    const names = (tl.json?.result?.tools ?? []).map((t) => t.name);
-    check("http lists search/fetch", names.includes("search") && names.includes("fetch"), names.length + " tools");
-    check("http public-only", !names.includes("academy_stats"));
-    const s = await post(callTool(3, "search", { query: "spaced repetition review" }));
-    const sres = JSON.parse(s.json?.result?.content?.[0]?.text ?? "{}");
-    check("http search results", Array.isArray(sres.results) && sres.results.length > 0, (sres.results?.length ?? 0) + " hits");
+    check("http /health ok", health?.ok === true && health?.mode === "course", "v" + health?.version);
+
+    // The whole point of the hosted server: an unauthenticated call must be a
+    // 401 that TELLS the client where to sign in. A 200 here would mean nobody
+    // ever discovers the authorization server, and nobody ever signs in.
+    const bare = await fetch(`http://127.0.0.1:${port}/mcp`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+      body: JSON.stringify(INIT),
+    });
+    const wwwAuth = bare.headers.get("www-authenticate") ?? "";
+    check("http /mcp unauthenticated → 401", bare.status === 401, "status " + bare.status);
+    check(
+      "401 carries resource_metadata",
+      wwwAuth.includes("resource_metadata=") && wwwAuth.includes("/.well-known/oauth-protected-resource"),
+      wwwAuth.slice(0, 80),
+    );
+
+    const prm = await fetch(`http://127.0.0.1:${port}/.well-known/oauth-protected-resource`).then((r) => r.json());
+    check("protected-resource metadata", Array.isArray(prm?.authorization_servers) && prm.authorization_servers.length > 0);
+
+    const asm = await fetch(`http://127.0.0.1:${port}/.well-known/oauth-authorization-server`).then((r) => r.json());
+    check(
+      "authorization-server metadata",
+      !!asm?.authorization_endpoint && !!asm?.token_endpoint && !!asm?.registration_endpoint,
+    );
+    check("PKCE S256 advertised", (asm?.code_challenge_methods_supported ?? []).includes("S256"));
+
+    // Claude and ChatGPT append the resource path to the well-known path.
+    // Both forms have to answer or discovery breaks for those clients.
+    const suffixed = await fetch(`http://127.0.0.1:${port}/.well-known/oauth-protected-resource/mcp`);
+    check("well-known also answers under /mcp", suffixed.status === 200, "status " + suffixed.status);
+
+    const bad = await fetch(`http://127.0.0.1:${port}/mcp`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer academy_at_nonsense" },
+      body: JSON.stringify(INIT),
+    });
+    check("invalid bearer → 401", bad.status === 401, "status " + bad.status);
   } catch (e) {
     check("http transport reachable", false, String(e));
   } finally {

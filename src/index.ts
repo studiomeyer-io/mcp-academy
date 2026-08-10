@@ -23,7 +23,11 @@
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createServer, VERSION } from "./server.js";
-import { startHttp } from "./http.js";
+// NOTE: ./http.js is imported DYNAMICALLY below, never at the top. It pulls in
+// the whole OAuth layer, which needs `pg` and `nodemailer` — optional
+// dependencies that the library half of this package must never require. A
+// static import here would make `npx -y mcp-academy` fail on a machine where
+// the optional installs did not happen, for a code path it never runs.
 
 const wantHttp =
   process.argv.includes("--http") ||
@@ -34,10 +38,11 @@ async function main() {
   if (wantHttp) {
     if (process.env.ACADEMY_API_KEY) {
       process.stderr.write(
-        "[mcp-academy] note: HTTP mode is public/anonymous; ACADEMY_API_KEY is ignored here (it would be shared across all callers). Use stdio for account features.\n",
+        "[mcp-academy] note: HTTP mode authenticates per person via OAuth; ACADEMY_API_KEY is ignored here (one key cannot stand for every caller).\n",
       );
     }
-    startHttp();
+    const { startHttp } = await import("./http.js");
+    await startHttp();
     return;
   }
 

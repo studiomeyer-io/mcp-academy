@@ -14,12 +14,24 @@
 
 **Take the StudioMeyer Academy "Memory-First AI Operator" course right inside your AI.** Claude, ChatGPT, Cursor or Codex becomes your tutor — it pulls the lessons, explains them, answers your questions, and walks you through building real things.
 
-The whole curriculum ships **inside this package**: 6 levels, ~47 lessons (DE/EN/ES), 48 hands-on playbooks, 61 build recipes. **No account, no API key, no database, no network needed to learn.** It's free and open source.
+The whole curriculum ships **inside this package**: 6 levels, 63 lessons (DE/EN/ES), 104 hands-on playbooks, 63 build recipes. **No account, no API key, no database, no network needed to learn.** It's free and open source.
 
 - **Levels 1–3** — fundamentals: what LLMs really do, prompting, simple automation.
 - **Levels 4–6** — the part almost nobody teaches: persistent memory, the MCP protocol, hooks & skills, multi-agent systems, and building + selling your own MCP server.
 
 Academy lives at <https://studiomeyer.academy>.
+
+## Library or course — pick one
+
+This package is the **library**: the curriculum, offline, in your editor, with nobody to sign in as. Read everything, in three languages, forever, for free.
+
+If you want the **course** — progress that survives the session, quizzes, certificates, a tutor that knows where you left off — connect the hosted server instead:
+
+```
+https://mcp.studiomeyer.academy/mcp
+```
+
+It asks you to sign in once (Google, Discord, or a link by email), and that is the whole difference. Same lessons, plus a memory of your way through them. Both are free.
 
 ## A note from us
 
