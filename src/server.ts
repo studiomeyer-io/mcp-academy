@@ -16,7 +16,7 @@ import { PUBLIC_TOOLS, handlePublicTool, PUBLIC_TOOL_NAMES } from "./public-tool
 import { ACCOUNT_TOOLS, handleAccountTool, ACCOUNT_TOOL_NAMES, type BridgeAuth } from "./account-tools.js";
 
 // Must match package.json — smoke-test.mjs fails the build if it drifts.
-export const VERSION = "0.4.0";
+export const VERSION = "0.4.1";
 
 const INSTRUCTIONS = `StudioMeyer Academy — a free, 6-level "Memory-First AI Operator" course you can take right inside this chat.
 

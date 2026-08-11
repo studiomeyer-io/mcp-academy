@@ -1,6 +1,6 @@
 {
   "name": "mcp-academy",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "mcpName": "io.studiomeyer/academy",
   "description": "The StudioMeyer Academy curriculum as an offline MCP library \u2014 6 levels, playbooks and build recipes in de/en/es, baked into the package. No account, no key, no network. For progress, quizzes and certificates, connect the hosted course at mcp.studiomeyer.academy.",
   "type": "module",
