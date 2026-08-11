@@ -1,7 +1,10 @@
-# mcp-academy — public HTTP server (anonymous, read-only).
-# Multi-stage: build TS + bake the content bundle, then ship a slim runtime.
-# The content bundle is generated from the academy content dir at BUILD context,
-# so it must be present in the build context (see docker-compose: build args / context).
+# mcp-academy — the hosted course server (OAuth 2.1, one signed-in person per
+# request). Not to be confused with the npm package, which is the offline
+# library and needs none of this.
+#
+# Multi-stage: build TS (server + migration scripts), then ship a slim runtime.
+# The curriculum bundle is committed and copied in; regenerate it with
+# `npm run bundle` against the academy content dir before building.
 
 FROM node:22-slim AS build
 WORKDIR /app
@@ -10,7 +13,7 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install --no-audit --no-fund
 
-COPY tsconfig.json ./
+COPY tsconfig.json tsconfig.scripts.json ./
 COPY src ./src
 COPY scripts ./scripts
 # Pre-generated bundle (committed). If you want to regenerate at build time,
@@ -41,7 +44,10 @@ COPY scripts/schema.sql ./scripts/schema.sql
 # healthcheck red, nginx dead, and `restart: unless-stopped` does not restart
 # an unhealthy container. It would have looked like a broken deploy.
 ENV MCP_TRANSPORT=http
-ENV ACADEMY_MCP_HOST=0.0.0.0
+# Loopback als Vorgabe. Wer den Container ins Netz stellen will, setzt es
+# bewusst um — und muss dann auch ACADEMY_MCP_BASE_URL setzen, sonst bricht
+# der Startup-Waechter ab (genau so gewollt).
+ENV ACADEMY_MCP_HOST=127.0.0.1
 ENV ACADEMY_MCP_PORT=3221
 
 EXPOSE 3221
@@ -52,4 +58,7 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=15s \
 
 # Migrate first, then serve. A failed migration must stop the start, not
 # get skipped — that is the whole point of the version guard.
-CMD ["sh", "-c", "node dist-scripts/scripts/migrate.js && node dist/index.js --http"]
+# `exec` ist nicht kosmetisch: ohne bleibt sh PID 1, faengt SIGTERM ab und
+# node sieht es nie — Stop/Recreate laufen dann in den 10s-Kill statt in einen
+# sauberen Shutdown (der Pool wird nicht geschlossen, laufende Requests brechen).
+CMD ["sh", "-c", "node dist-scripts/scripts/migrate.js && exec node dist/index.js --http"]

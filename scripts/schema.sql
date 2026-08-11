@@ -1,4 +1,4 @@
--- SCHEMA_VERSION: 1
+-- SCHEMA_VERSION: 2
 --
 -- Tables for the hosted Academy course server (mcp.studiomeyer.academy).
 --
@@ -105,7 +105,7 @@ CREATE INDEX IF NOT EXISTS academy_mcp_oauth_provider_states_expires_idx
 -- (users.ts:isUserAllowed), ein gemischt geschriebener Eintrag haette also
 -- nie gegriffen — eine Sperre, die stumm nichts tut, ist schlimmer als keine.
 CREATE TABLE IF NOT EXISTS academy_mcp_blocked (
-  email      TEXT PRIMARY KEY CHECK (email = lower(email)),
+  email      TEXT PRIMARY KEY CHECK (email = lower(btrim(email))),
   reason     TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

@@ -235,10 +235,13 @@ export async function startHttp(): Promise<void> {
         // Only genuinely malformed input is the caller's fault. Everything else
         // (database down, OAuth layer throwing, SDK failure) is ours, and its
         // message must not leave the process — it names internals.
+        // Eng gefasst: nur was der Aufrufer tatsaechlich verursacht haben
+        // kann. Ein blankes `instanceof TypeError` faengt auch eigene
+        // Programmierfehler ein und meldet sie als 400 — dann sucht man den
+        // Bug beim Nutzer statt bei sich.
         const callerFault =
-          e instanceof SyntaxError ||
-          e instanceof TypeError ||
-          /payload too large|Invalid URL/i.test(message);
+          e instanceof SyntaxError ||                       // kaputtes JSON im Body
+          /payload too large|Invalid URL/i.test(message);   // zu gross / krankes Request-Target
         if (callerFault) {
           res.writeHead(400, { "content-type": "application/json" });
           res.end(JSON.stringify({ error: "bad_request" }));
@@ -255,4 +258,36 @@ export async function startHttp(): Promise<void> {
   http.listen(port, getHost(), () => {
     console.error(`[mcp-academy v${VERSION}] course server on http://${getHost()}:${port}${MCP_PATH} (oauth 2.1)`);
   });
+
+  // Ohne das hier beendet sich der Prozess bei SIGTERM nie von selbst: Docker
+  // wartet zehn Sekunden und schiesst dann hart. Gemessen an genau diesem
+  // Container — 11s pro Neustart, laufende Anfragen mittendrin abgeschnitten,
+  // der Datenbank-Pool nie geschlossen. Bei jedem Deploy.
+  //
+  // Reihenfolge zaehlt: erst keine neuen Verbindungen mehr annehmen, dann eine
+  // kurze Frist fuer das, was noch in der Leitung ist, DANN die Datenbank
+  // schliessen. Andersherum laufen die letzten Anfragen in "pool has ended".
+  let shuttingDown = false;
+  const shutdown = async (signal: string): Promise<void> => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.error(`[mcp-academy] ${signal} — fahre herunter`);
+    // Notbremse: haengt eine Verbindung, wird trotzdem beendet, statt in den
+    // harten Kill zu laufen.
+    const force = setTimeout(() => {
+      console.error("[mcp-academy] Zeit abgelaufen, beende hart");
+      process.exit(1);
+    }, 12_000);
+    force.unref();
+    await new Promise<void>((resolve) => http.close(() => resolve()));
+    await new Promise((r) => setTimeout(r, 250));
+    try {
+      const { closeDb } = await import("./db.js");
+      await closeDb();
+    } catch { /* beim Herunterfahren nicht mehr wichtig */ }
+    clearTimeout(force);
+    process.exit(0);
+  };
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
 }
