@@ -3,8 +3,9 @@
  *
  * Two modes:
  *   - "public": account-free. Curriculum reads + search/fetch from the bundle.
- *               Zero config. This is what the hosted HTTP endpoint + `npx mcp-academy`
- *               (no key) expose, and what ChatGPT connects to.
+ *               Zero config. This is `npx mcp-academy` without a key — the
+ *               library. NOT the hosted endpoint: that one authenticates every
+ *               request and always builds a signed-in server (see http.ts).
  *   - "full":   public tools PLUS account tools (progress/quiz/certs/tutor) bound
  *               to a personal ACADEMY_API_KEY. stdio only.
  */

@@ -13,12 +13,31 @@
  * academy_mcp_schema_meta. Weichen sie ab, bricht der Start ab und sagt, was fehlt.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getDb, closeDb } from "../src/db.js";
 
 const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * schema.sql liegt beim Quelltext neben dieser Datei, im gebauten Stand aber
+ * eine Ebene ueber dem kompilierten Skript (dist-scripts/scripts/migrate.js ->
+ * scripts/schema.sql im Arbeitsverzeichnis). Beide Wege pruefen, statt sich auf
+ * einen zu verlassen: sonst startet der Container, findet die Datei nicht und
+ * bricht mit ENOENT ab — was wie ein Datenbank-Problem aussieht, aber keines ist.
+ */
+function findSqlFile(name: string): string {
+  const candidates = [
+    join(SCRIPTS_DIR, name),
+    join(SCRIPTS_DIR, "..", "..", "scripts", name),
+    join(process.cwd(), "scripts", name),
+  ];
+  for (const c of candidates) if (existsSync(c)) return c;
+  throw new Error(
+    `[academy-migrate] ${name} nicht gefunden. Gesucht in:\n  ${candidates.join("\n  ")}`,
+  );
+}
 
 /** Liest `-- SCHEMA_VERSION: N` aus dem Kopf von schema.sql. */
 export function parseSchemaVersion(sql: string): number {
@@ -112,7 +131,7 @@ export function decideSchemaAction(
  */
 export async function runMigration(schemaSql?: string): Promise<void> {
   const db = getDb();
-  const schema = schemaSql ?? readFileSync(join(SCRIPTS_DIR, "schema.sql"), "utf8");
+  const schema = schemaSql ?? readFileSync(findSqlFile("schema.sql"), "utf8");
   const fileVersion = parseSchemaVersion(schema);
 
   await db.query(schema);
@@ -152,7 +171,7 @@ export async function runMigration(schemaSql?: string): Promise<void> {
   }
 
   if (process.argv.includes("--seed-dev")) {
-    const seed = readFileSync(join(SCRIPTS_DIR, "seed-dev.sql"), "utf8");
+    const seed = readFileSync(findSqlFile("seed-dev.sql"), "utf8");
     await db.query(seed);
     console.error("[academy-migrate] seed-dev.sql applied (Platzhalter-Tenant test-agentur)");
   }

@@ -90,7 +90,7 @@ const DICT: Record<Locale, Strings> = {
     permissions_header: "Este cliente podra",
     permission_course: "Leer y seguir el curso dentro de tu IA",
     permission_progress: "Guardar tu progreso — lecciones, cuestionarios, repaso, certificados",
-    permission_tutor: "Enviar solicitudes a StudioMeyer (respuestas a tu email)",
+    permission_tutor: "Preguntar al tutor de IA sobre una leccion",
     continue_with_google: "Continuar con Google",
     continue_with_discord: "Continuar con Discord",
     or_with_email: "o por email",

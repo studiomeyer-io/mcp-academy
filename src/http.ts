@@ -30,7 +30,7 @@
  *   user rate limit    keyed on the person, not the address
  *   serve MCP          fresh server + transport per request, bound to the email
  *
- * Env: ACADEMY_MCP_PORT (default 8080), ACADEMY_MCP_HOST (default 127.0.0.1 —
+ * Env: ACADEMY_MCP_PORT (default 3116), ACADEMY_MCP_HOST (default 127.0.0.1 —
  * it sits behind nginx), MCP_PATH (default /mcp), ACADEMY_MCP_BASE_URL (the
  * public URL, required unless bound to loopback).
  */
@@ -40,12 +40,18 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { createServer, VERSION } from "./server.js";
 import { handleOAuth, checkBearerToken, hydrateOAuthState, startOAuthCleanup } from "./auth/oauth.js";
 import { validateEnvAtStartup } from "./core/startup-checks.js";
-import { getBaseUrl, getPort } from "./core/base-url.js";
+import { getBaseUrl, getPort, getHost } from "./core/base-url.js";
 import { clientIp } from "./core/client-ip.js";
 import { checkIpRateLimit, checkUserRateLimit } from "./safety/rate-limit.js";
 import { isUserAllowed, touchLastSeen } from "./auth/users.js";
 
-const HOST = process.env.ACADEMY_MCP_HOST ?? "127.0.0.1";
+// Host comes from base-url.ts and NOWHERE else. A second copy here used `??`
+// where base-url.ts uses `||`: with ACADEMY_MCP_HOST set but EMPTY, this file
+// bound to "" (= all interfaces, verified: node listen(0,"") reports "::")
+// while assertBaseUrlUsable() asked base-url.ts, got the "127.0.0.1" default,
+// concluded "loopback" and waved the missing ACADEMY_MCP_BASE_URL through.
+// Result: publicly bound server advertising http://127.0.0.1 in its
+// WWW-Authenticate header, metadata documents and magic-link emails.
 const MCP_PATH = process.env.MCP_PATH ?? "/mcp";
 
 /**
@@ -72,7 +78,7 @@ function setCommonHeaders(res: ServerResponse, origin: string | undefined): void
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "content-type, authorization, mcp-session-id, mcp-protocol-version");
     // UPPERCASE is not cosmetic — lowercase breaks Claude.ai and Claude Desktop.
-    res.setHeader("Access-Control-Expose-Headers", "MCP-Session-ID, mcp-protocol-version");
+    res.setHeader("Access-Control-Expose-Headers", "MCP-Session-ID, mcp-protocol-version, WWW-Authenticate");
   }
 }
 
@@ -192,13 +198,17 @@ export async function startHttp(): Promise<void> {
   );
   startOAuthCleanup();
   const http = createHttp(async (req, res) => {
-    const origin = req.headers.origin;
-    setCommonHeaders(res, origin);
-    const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
-
-    if (req.method === "OPTIONS") { res.writeHead(204).end(); return; }
-
+    // Everything inside the try, including the URL parse. A malformed Host
+    // header or request target makes `new URL()` throw, and outside the try
+    // that becomes an unhandled rejection in an async handler — which takes
+    // the process down. One bad request should be a 400, not an outage.
     try {
+      const origin = req.headers.origin;
+      setCommonHeaders(res, origin);
+      const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+
+      if (req.method === "OPTIONS") { res.writeHead(204).end(); return; }
+
       // Sign-in routes first, and without the origin guard: in-app browsers
       // (the ones a magic link opens on a phone) send `Origin: null`, and a
       // global guard locked them out of their own login. Learned the hard way
@@ -220,17 +230,29 @@ export async function startHttp(): Promise<void> {
       res.end(JSON.stringify({ error: "not_found", hint: `MCP endpoint is ${MCP_PATH}` }));
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      console.error(`[academy-http] ${req.method} ${url.pathname}: ${message}`);
+      console.error(`[academy-http] ${req.method} ${req.url}: ${message}`);
       if (!res.headersSent) {
-        res.writeHead(400, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "bad_request", message }));
+        // Only genuinely malformed input is the caller's fault. Everything else
+        // (database down, OAuth layer throwing, SDK failure) is ours, and its
+        // message must not leave the process — it names internals.
+        const callerFault =
+          e instanceof SyntaxError ||
+          e instanceof TypeError ||
+          /payload too large|Invalid URL/i.test(message);
+        if (callerFault) {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "bad_request" }));
+        } else {
+          res.writeHead(500, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "internal_error" }));
+        }
       } else {
         res.end();
       }
     }
   });
 
-  http.listen(port, HOST, () => {
-    console.error(`[mcp-academy v${VERSION}] course server on http://${HOST}:${port}${MCP_PATH} (oauth 2.1)`);
+  http.listen(port, getHost(), () => {
+    console.error(`[mcp-academy v${VERSION}] course server on http://${getHost()}:${port}${MCP_PATH} (oauth 2.1)`);
   });
 }

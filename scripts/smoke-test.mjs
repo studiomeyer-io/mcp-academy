@@ -116,7 +116,14 @@ if (!process.env.ACADEMY_MCP_DATABASE_URL && !process.env.DATABASE_URL) {
 } else {
   const port = 8791;
   const child = spawn("node", ["dist/index.js", "--http"], {
-    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", ACADEMY_MCP_BASE_URL: `http://127.0.0.1:${port}` },
+    // ACADEMY_MCP_* — plain PORT/HOST are ignored by core/base-url.ts. Getting
+    // this wrong is exactly the bug that would have shipped in the Dockerfile.
+    env: {
+      ...process.env,
+      ACADEMY_MCP_PORT: String(port),
+      ACADEMY_MCP_HOST: "127.0.0.1",
+      ACADEMY_MCP_BASE_URL: `http://127.0.0.1:${port}`,
+    },
     stdio: ["ignore", "pipe", "pipe"],
   });
   await sleep(1500);

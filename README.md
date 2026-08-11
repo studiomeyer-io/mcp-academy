@@ -72,7 +72,7 @@ ChatGPT connects to a hosted URL, not a local command. Add a connector pointing 
 https://mcp.studiomeyer.academy/mcp
 ```
 
-No authentication needed — it's a public, read-only learning server. (Settings → Connectors / Developer mode → add the URL above.) ChatGPT then uses `search` + `fetch` to read the course and teach it to you.
+You sign in once when you add it (Google, Discord, or a link by email) and the course then remembers your progress. If you would rather not sign in at all, use the npm package above — it carries the same curriculum offline.
 
 ## What you can do (free, no account)
 
@@ -97,17 +97,17 @@ If you have a [studiomeyer.academy](https://studiomeyer.academy) account, add yo
 claude mcp add academy -s user --env ACADEMY_API_KEY=academy_xxx -- npx -y mcp-academy
 ```
 
-Create a key at <https://studiomeyer.academy/dashboard/keys>. This adds: `academy_stats`, `academy_next_lesson`, `academy_progress_complete`, `academy_quiz`, `academy_quiz_submit`, `academy_review`, `academy_review_grade`, `academy_certificates`, `academy_tutor` (Pro). These talk to the Academy REST bridge with your Bearer token — and are only ever available over stdio, never on the public HTTP endpoint.
+Create a key at <https://studiomeyer.academy/dashboard/keys>. This adds: `academy_stats`, `academy_next_lesson`, `academy_progress_complete`, `academy_quiz`, `academy_quiz_submit`, `academy_review`, `academy_review_grade`, `academy_certificates`, `academy_tutor` (Pro). These talk to the Academy REST bridge with your Bearer token. The hosted course at `mcp.studiomeyer.academy` offers the same tools without any key — it signs you in via OAuth instead, which is the friendlier route.
 
 > `ACADEMY_BASE_URL` defaults to `https://studiomeyer.academy` and should only ever point at the real Academy origin (it's where your key is sent). Useful for pointing at a local Academy instance during development.
 
 ## Run your own HTTP endpoint
 
 ```bash
-PORT=8080 npx -y mcp-academy --http     # public, anonymous, read-only at /mcp
+ACADEMY_MCP_PORT=3116 npx -y mcp-academy --http   # the hosted course: OAuth required, needs Postgres
 ```
 
-Stateless Streamable HTTP, one isolated session per request. Put it behind a reverse proxy / Cloudflare. The HTTP mode never reads `ACADEMY_API_KEY` (a shared hosted key would expose one account to everyone).
+Stateless Streamable HTTP, one isolated session per request, behind a reverse proxy. Every `/mcp` request needs a Bearer token — the server answers `401` with a `WWW-Authenticate` header and clients follow it into the sign-in flow by themselves. It therefore needs Postgres (`ACADEMY_MCP_DATABASE_URL`, pointed at the Academy's own database), a public `ACADEMY_MCP_BASE_URL`, SMTP for magic links, and Google/Discord credentials if you want those buttons. `ACADEMY_API_KEY` is ignored here — one shared key cannot stand for every caller.
 
 ## How it stays fresh & safe
 

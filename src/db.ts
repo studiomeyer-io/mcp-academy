@@ -15,8 +15,10 @@ export function getDb(): Pool {
   const url = process.env.ACADEMY_MCP_DATABASE_URL || process.env.DATABASE_URL;
   if (!url) {
     throw new Error(
-      "ACADEMY_MCP_DATABASE_URL not set. Required for academy_* table access. " +
-        "Example: postgres://matthiasmeyer:PASSWORD@localhost:5433/academy_mcp",
+      "ACADEMY_MCP_DATABASE_URL not set. Point it at academy_db — the Academy website's own database. " +
+        "This server writes its academy_mcp_* tables there and READS Prisma's \"User\" table; " +
+        "a URL pointing anywhere else makes every address look unknown. " +
+        "Example: postgres://matthiasmeyer:PASSWORD@localhost:5433/academy_db",
     );
   }
   pool = new Pool({

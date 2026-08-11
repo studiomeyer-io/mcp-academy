@@ -14,12 +14,13 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.scripts.json",
     "bundle": "node scripts/bundle-content.mjs",
     "prepublishOnly": "npm run build",
     "dev": "tsx src/index.ts",
     "start:http": "node dist/index.js --http",
-    "smoke": "node scripts/smoke-test.mjs"
+    "smoke": "node scripts/smoke-test.mjs",
+    "db:schema": "node dist-scripts/scripts/migrate.js"
   },
   "keywords": [
     "mcp",

@@ -1017,6 +1017,7 @@ function authCodeGrant(form: { get(k: string): string | null }, res: ServerRespo
     client_id: clientId,
     email: entry.email,
     access_token: accessTokenPlain,
+    family_id: rt.family_id,
     created_at: rt.created_at,
     expires_at: rt.expires_at,
   });
@@ -1118,6 +1119,11 @@ async function doRefresh(refreshTokenHash: string, clientId: string): Promise<Re
     client_id: clientId,
     email: entry.email,
     access_token: newAccessPlain,
+    // Inherit the family: rotation stays in the same chain of trust, so a
+    // replayed predecessor still revokes everything descended from that one
+    // authorization. Omitting this here left the column NULL for every refresh
+    // token — the persisted-family fix would have covered access tokens only.
+    family_id: rt.family_id,
     created_at: rt.created_at,
     expires_at: rt.expires_at,
   });

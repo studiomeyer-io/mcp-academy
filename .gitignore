@@ -3,3 +3,7 @@ dist
 *.log
 .env
 .env.local
+dist-scripts/
+src/*.js
+src/*.d.ts
+src/*.js.map

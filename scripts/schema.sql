@@ -101,8 +101,11 @@ CREATE INDEX IF NOT EXISTS academy_mcp_oauth_provider_states_expires_idx
 -- else's table for a field only this server reads — so the flag lives here.
 -- Enforced at: magic-link request, magic-link redeem, social callback, and on
 -- every /mcp request (a token issued before a block must stop working).
+-- CHECK erzwingt Kleinschreibung: jede Pruefung normalisiert die Adresse
+-- (users.ts:isUserAllowed), ein gemischt geschriebener Eintrag haette also
+-- nie gegriffen — eine Sperre, die stumm nichts tut, ist schlimmer als keine.
 CREATE TABLE IF NOT EXISTS academy_mcp_blocked (
-  email      TEXT PRIMARY KEY,
+  email      TEXT PRIMARY KEY CHECK (email = lower(email)),
   reason     TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -113,3 +116,7 @@ CREATE TABLE IF NOT EXISTS academy_mcp_schema_meta (
   version     INTEGER NOT NULL,
   applied_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- Die Zeile schreibt migrate.ts, NICHT diese Datei: es muss die Version aus
+-- dem Kopf hier sein, und der Vergleich davor entscheidet ueber Abbruch.
+-- Eine leere Tabelle anzulegen und die Version nie einzutragen waere genau
+-- die Scheinsicherheit, gegen die der Waechter gebaut ist.
