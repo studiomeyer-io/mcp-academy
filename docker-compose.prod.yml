@@ -1,0 +1,56 @@
+# mcp-academy, the hosted Academy course (mcp.studiomeyer.academy), on PROD.
+#
+# Since 06.09.2026 (S2250) this runs on prod (46.225.14.141) next to the
+# Academy itself; Alt-Dev is being cancelled. Checkout on prod: /opt/mcp-academy
+# (deploy key github-mcp-academy, read-only). Deploy:
+#
+#   local:  git push origin master
+#   server: ssh prod 'git -C /opt/mcp-academy pull && \
+#             docker compose -f /opt/mcp-academy/docker-compose.prod.yml \
+#             up -d --build mcp-academy'
+#
+# Differences to the Alt-Dev file (docker-compose.altdev.yml):
+#   - no network_mode: host. The container joins studiomeyer-network, where
+#     studiomeyer-postgres lives, so ACADEMY_MCP_DATABASE_URL in .env points to
+#     studiomeyer-postgres:5432 (not 127.0.0.1:5433, which would be the
+#     container itself on a bridge).
+#   - ACADEMY_MCP_HOST is 0.0.0.0 INSIDE the container; docker publishes it on
+#     127.0.0.1:3221 only, nginx terminates TLS in front of it.
+#
+# The env var names matter: the code reads ACADEMY_MCP_HOST / ACADEMY_MCP_PORT
+# (core/base-url.ts). Secrets live in /opt/mcp-academy/.env (chmod 600).
+
+services:
+  mcp-academy:
+    image: mcp-academy:prod
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mcp-academy
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    mem_limit: 512m
+    env_file:
+      - /opt/mcp-academy/.env
+    ports:
+      - "127.0.0.1:3221:3221"
+    environment:
+      MCP_TRANSPORT: "http"
+      ACADEMY_MCP_HOST: "0.0.0.0"
+      ACADEMY_MCP_PORT: "3221"
+    networks:
+      - studiomeyer-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch(\"http://127.0.0.1:3221/health\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: "json-file"
+      options: { max-size: "10m", max-file: "3" }
+
+networks:
+  studiomeyer-network:
+    external: true
