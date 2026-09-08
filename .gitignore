@@ -7,3 +7,6 @@ dist-scripts/
 src/*.js
 src/*.d.ts
 src/*.js.map
+
+# Codegraph-Index, wird lokal erzeugt
+.codegraph/
