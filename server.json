@@ -2,27 +2,34 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.studiomeyer/academy",
   "title": "StudioMeyer Academy",
-  "description": "The Academy curriculum as an offline MCP library. Hosted course connector adds progress.",
+  "description": "Live Academy learning and search. OAuth adds scoped personal tools. Explicit --offline snapshot.",
   "repository": {
     "url": "https://github.com/studiomeyer-io/mcp-academy",
     "source": "github"
   },
-  "version": "0.4.1",
+  "version": "0.5.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "mcp-academy",
-      "version": "0.4.1",
+      "version": "0.5.0",
       "transport": {
         "type": "stdio"
       },
       "environmentVariables": [
         {
-          "description": "Optional, stdio only. Legacy Academy API key. The hosted connector at mcp.studiomeyer.academy uses OAuth instead and needs no key.",
+          "description": "Optional trusted Academy origin for local development. Defaults to https://studiomeyer.academy.",
           "isRequired": false,
           "format": "string",
-          "isSecret": true,
-          "name": "ACADEMY_API_KEY"
+          "isSecret": false,
+          "name": "ACADEMY_BASE_URL"
+        },
+        {
+          "description": "Set to 1 only to opt into the legacy offline curriculum snapshot. Hosted and default stdio read live Academy content.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "ACADEMY_OFFLINE"
         }
       ]
     }
@@ -31,6 +38,10 @@
     {
       "type": "streamable-http",
       "url": "https://mcp.studiomeyer.academy/mcp"
+    },
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.studiomeyer.academy/mcp?access=free"
     }
   ]
 }

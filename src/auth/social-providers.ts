@@ -1,5 +1,5 @@
 /**
- * Social-Login providers — Google + Discord.
+ * Social-Login providers - Google + Discord.
  *
  * GitHub bleibt bewusst draussen (Matthias-Entscheidung S1109): eine
  * OAuth-App pro Domain ist zu viel Reibung, kaum Conversion-Lift ueber
@@ -13,6 +13,8 @@
 
 import { randomBytes } from "node:crypto";
 import { getDb } from "../db.js";
+import { hashToken } from "./token-hash.js";
+import { type Grant, normalizeGrant } from "./grants.js";
 import { safeFetchPublic } from "./safe-fetch.js";
 import { isValidEmail, normalizeEmail } from "./users.js";
 
@@ -42,7 +44,7 @@ const CONFIG: Record<Provider, ProviderConfig> = {
     token_url: "https://oauth2.googleapis.com/token",
     userinfo_url: "https://openidconnect.googleapis.com/v1/userinfo",
     scope: "openid email profile",
-    // `prompt=select_account` erzwingt den Account-Picker — sonst werden
+    // `prompt=select_account` erzwingt den Account-Picker - sonst werden
     // Multi-Account-Haushalte still auf den falschen Account geleitet.
     extra_authorize_params: { prompt: "select_account" },
   },
@@ -54,7 +56,7 @@ const CONFIG: Record<Provider, ProviderConfig> = {
   },
 };
 
-const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes — same as magic-link
+const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes - same as magic-link
 
 /** True wenn die Env-Vars fuer diesen Provider konfiguriert sind. */
 export function isProviderEnabled(provider: Provider): boolean {
@@ -63,7 +65,7 @@ export function isProviderEnabled(provider: Provider): boolean {
   return Boolean(id && secret);
 }
 
-/** Liste der aktiven Provider — steuert das Rendern der Login-Buttons. */
+/** Liste der aktiven Provider - steuert das Rendern der Login-Buttons. */
 export function enabledProviders(): Provider[] {
   return PROVIDERS.filter(isProviderEnabled);
 }
@@ -86,62 +88,33 @@ export function callbackUrl(baseUrl: string, provider: Provider): string {
  * Returns the random `state` value to put in the provider authorize URL.
  */
 export async function createProviderState(opts: {
-  provider: Provider;
-  client_id: string;
-  redirect_uri: string;
-  pkce_challenge: string;
-  client_state: string | null;
+  provider: Provider; client_id: string; redirect_uri: string;
+  pkce_challenge: string; client_state: string | null;
+  grant?: Grant; browser_hash?: string;
 }): Promise<string> {
-  const state = `sk_${randomBytes(24).toString("base64url")}`;
-  const expiresAt = new Date(Date.now() + STATE_TTL_MS);
+  const state = randomBytes(32).toString("base64url");
+  const grant = normalizeGrant(opts.grant ?? {});
   await getDb().query(
     `INSERT INTO academy_mcp_oauth_provider_states
-       (state, provider, client_id, redirect_uri, pkce_challenge, client_state, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [state, opts.provider, opts.client_id, opts.redirect_uri, opts.pkce_challenge, opts.client_state, expiresAt],
+      (state,provider,client_id,redirect_uri,pkce_challenge,client_state,scopes,resource,grant_version,consented_at,browser_hash,expires_at)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    [hashToken(state),opts.provider,opts.client_id,opts.redirect_uri,opts.pkce_challenge,opts.client_state,
+      grant.scopes,grant.resource,grant.grant_version,grant.consented_at,opts.browser_hash ?? null,new Date(Date.now()+STATE_TTL_MS)],
   );
   return state;
 }
-
-export interface ConsumedProviderState {
-  provider: Provider;
-  client_id: string;
-  redirect_uri: string;
-  pkce_challenge: string;
-  client_state: string | null;
+export interface ConsumedProviderState extends Grant {
+  provider: Provider; client_id: string; redirect_uri: string;
+  pkce_challenge: string; client_state: string | null; browser_hash: string;
 }
-
-/**
- * Atomically claim a provider state row. Returns null when the row is
- * missing, expired or already used. Guarded UPDATE mit RETURNING — zwei
- * parallele Callbacks (Doppelklick) koennen nicht beide gewinnen.
- */
-export async function consumeProviderState(state: string): Promise<ConsumedProviderState | null> {
-  if (!state || typeof state !== "string" || state.length > 200) return null;
-  const result = await getDb().query<{
-    provider: Provider;
-    client_id: string;
-    redirect_uri: string;
-    pkce_challenge: string;
-    client_state: string | null;
-  }>(
-    `UPDATE academy_mcp_oauth_provider_states
-        SET used = TRUE
-      WHERE state = $1
-        AND used = FALSE
-        AND expires_at > NOW()
-      RETURNING provider, client_id, redirect_uri, pkce_challenge, client_state`,
-    [state],
+export async function consumeProviderState(state: string, browserHash?: string): Promise<ConsumedProviderState | null> {
+  if (!state || state.length > 200 || !browserHash) return null;
+  const result = await getDb().query<ConsumedProviderState>(
+    `UPDATE academy_mcp_oauth_provider_states SET used=TRUE
+      WHERE state=$1 AND browser_hash=$2 AND used=FALSE AND expires_at>NOW() RETURNING *`,
+    [hashToken(state),browserHash],
   );
-  const row = result.rows[0];
-  if (!row) return null;
-  return {
-    provider: row.provider,
-    client_id: row.client_id,
-    redirect_uri: row.redirect_uri,
-    pkce_challenge: row.pkce_challenge,
-    client_state: row.client_state,
-  };
+  return result.rows[0] ?? null;
 }
 
 /**
@@ -183,7 +156,7 @@ export function buildProviderAuthorizeUrl(opts: {
 
 /**
  * Exchange `code` for the provider's access_token.
- * Throws on any failure — caller logs + returns generic error to user.
+ * Throws on any failure - caller logs + returns generic error to user.
  */
 export async function exchangeProviderCode(opts: {
   provider: Provider;
@@ -248,7 +221,7 @@ export async function fetchProviderProfile(opts: {
 
 /**
  * Normalize provider-specific JSON shapes into our common ProviderProfile.
- * Discord kann die Email als unverifiziert flaggen — dann lehnen wir ab
+ * Discord kann die Email als unverifiziert flaggen - dann lehnen wir ab
  * (der Sinn von Social-Login ist die Provider-Verifikation).
  */
 export function normalizeProfile(provider: Provider, raw: unknown): ProviderProfile {

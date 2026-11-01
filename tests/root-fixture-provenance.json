@@ -1,0 +1,16 @@
+{
+  "source": "studiomeyer-io/academy",
+  "capture": "API index captured over real HTTP from the built Academy standalone service; existing alias examples originate from normalizeLegacyInput(). No private data or credentials are included.",
+  "operationCount": 52,
+  "sourceSha256": {
+    "src/lib/academy/registry.ts": "c53d14327d5bb884d5e25c64f8c838c0324d9445885e2088c310c6d107dc7276",
+    "src/lib/academy/machine-docs.ts": "a8b4bfa3cfc37cd10bf677a921a80c7b7fa67d824bf3e7dc7ade9ed8cf7e3bce",
+    "src/lib/academy/aliases.ts": "e514e0f06e0ff2366b904de09b859fabcba57d7af1b5bad41a567be474dee9ef",
+    "src/lib/academy/commerce-operations.ts": "1da5227869b7c964d090a2f5e0bc8f910c5e7fd5fe2a084f8dd3072887bec59a",
+    "src/lib/academy/contracts.ts": "43ddb292cf984e856035634199a663b503ebf0187a02421bb13f419defd6eec2",
+    "src/lib/academy/schemas.ts": "d19944bd5dce5065ee10700b0ae2b94ad4a2f57d4d8489713e85f058faf45f58",
+    "src/lib/academy/learning-operations.ts": "cef894caeec5a163cbbcc7f1eab1155634a17486823df21100c69761207426c2"
+  },
+  "fixtureSha256": "7fb8e3000be03231966e237540e638a1474fa9338a9a9176b361791144ab6b13",
+  "sourceCommit": "6ee6acb"
+}

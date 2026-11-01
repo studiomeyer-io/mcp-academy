@@ -1,8 +1,8 @@
 {
   "name": "mcp-academy",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "mcpName": "io.studiomeyer/academy",
-  "description": "The StudioMeyer Academy curriculum as an offline MCP library \u2014 6 levels, playbooks and build recipes in de/en/es, baked into the package. No account, no key, no network. For progress, quizzes and certificates, connect the hosted course at mcp.studiomeyer.academy.",
+  "description": "Live StudioMeyer Academy MCP: public learning and search, OAuth-scoped personal tools, explicit --offline legacy library.",
   "type": "module",
   "bin": {
     "mcp-academy": "./dist/index.js"
@@ -20,7 +20,11 @@
     "dev": "tsx src/index.ts",
     "start:http": "node dist/index.js --http",
     "smoke": "node scripts/smoke-test.mjs",
-    "db:schema": "node dist-scripts/scripts/migrate.js"
+    "db:schema": "node dist-scripts/scripts/migrate.js",
+    "test": "node --import tsx --test tests/grants.test.ts tests/platform.test.ts tests/root-contract.test.ts",
+    "test:auth-db": "node --import tsx --test tests/oauth-db.test.ts",
+    "smoke:platform": "node scripts/platform-smoke.mjs",
+    "test:migration-db": "node --import tsx --test tests/oauth-migration.test.ts"
   },
   "keywords": [
     "mcp",
@@ -42,10 +46,12 @@
   },
   "homepage": "https://studiomeyer.academy",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.32.1"
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
   },
   "overrides": {
-    "@hono/node-server": "^2.0.5",
+    "@hono/node-server": "^2.1.5",
     "js-yaml": {
       "argparse": "2.0.1"
     }
@@ -58,10 +64,10 @@
     "typescript": "^5.7.2"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "optionalDependencies": {
     "pg": "^8.23.1",
-    "nodemailer": "^10.1.2"
+    "nodemailer": "^10.3.1"
   }
 }

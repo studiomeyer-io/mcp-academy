@@ -1,5 +1,5 @@
 /**
- * Gebrandete Seiten-Huelle — Familien-Design mit Wortmarke fuer ALLE
+ * Gebrandete Seiten-Huelle - Familien-Design mit Wortmarke fuer ALLE
  * Auth-Folgeseiten (Check-Email, Verbunden, Provider-Fehler).
  *
  * S1909-Nachfix (Matthias-Fund): die erste Fassung hatte nur Farben gedreht,
@@ -19,7 +19,7 @@ export function brandedPageShell(locale: string, title: string, innerHtml: strin
 <html lang="${locale}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<title>StudioMeyer Academy — ${escHtml(title)}</title>
+<title>StudioMeyer Academy - ${escHtml(title)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Plus+Jakarta+Sans:wght@300;600;700&display=swap" rel="stylesheet">

@@ -2,11 +2,11 @@
  * Schema-Migration: scripts/schema.sql idempotent einspielen.
  * Laeuft beim Container-Start (vor dem http-server) und via `npm run db:schema`.
  * Optional: `--seed-dev` spielt zusaetzlich scripts/seed-dev.sql ein
- * (NUR Platzhalter-Daten — nie in Prod verwenden).
+ * (NUR Platzhalter-Daten - nie in Prod verwenden).
  *
  * Versions-Waechter (Fable-R8, Finding 6): `CREATE TABLE IF NOT EXISTS` ist auf
  * einer bestehenden Tabelle ein No-op. Eine nachtraeglich ergaenzte Spalte oder
- * geaenderte CHECK-Bedingung wird also NIE angewandt — frueher meldete der
+ * geaenderte CHECK-Bedingung wird also NIE angewandt - frueher meldete der
  * Start trotzdem „schema.sql applied", der Healthcheck war gruen, und der
  * Fehler kam als `column ... does not exist` beim Kunden an. Darum traegt
  * schema.sql eine SCHEMA_VERSION im Kopf und die DB eine in
@@ -25,7 +25,7 @@ const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
  * eine Ebene ueber dem kompilierten Skript (dist-scripts/scripts/migrate.js ->
  * scripts/schema.sql im Arbeitsverzeichnis). Beide Wege pruefen, statt sich auf
  * einen zu verlassen: sonst startet der Container, findet die Datei nicht und
- * bricht mit ENOENT ab — was wie ein Datenbank-Problem aussieht, aber keines ist.
+ * bricht mit ENOENT ab - was wie ein Datenbank-Problem aussieht, aber keines ist.
  */
 function findSqlFile(name: string): string {
   const candidates = [
@@ -57,12 +57,12 @@ export type SchemaAction =
   | { kind: "abbruch"; message: string };
 
 /**
- * Die Entscheidung als eigene, reine Funktion — damit sie pruefbar ist.
+ * Die Entscheidung als eigene, reine Funktion - damit sie pruefbar ist.
  *
  * Als das noch als Kette von `else if` in runMigration stand, konnte die
  * Mutations-Matrix die Bedingung durch `if (false)` ersetzen, ohne dass ein
  * Test rot wurde: die Tests prueften nur, ob der Wortlaut „Schema-Drift" in
- * der Datei vorkommt — und der stand ja weiterhin im toten Zweig. Eine
+ * der Datei vorkommt - und der stand ja weiterhin im toten Zweig. Eine
  * Zusicherung ueber Text ist keine Zusicherung ueber Verhalten.
  */
 export function decideSchemaAction(
@@ -73,7 +73,7 @@ export function decideSchemaAction(
    * (Fable-R9, Finding 4.)
    *
    * Ohne diese Unterscheidung bedeutet `dbVersion === undefined` zweierlei:
-   * „frische Datenbank" — dann ist das Eintragen der Version richtig — oder
+   * „frische Datenbank" - dann ist das Eintragen der Version richtig - oder
    * „bestehende Datenbank, die die Meta-Tabelle noch nicht kennt". Im zweiten
    * Fall wurde bisher stillschweigend die aktuelle Version eingetragen,
    * obwohl kein einziges ALTER gelaufen war: der Start meldete Erfolg, und der
@@ -91,7 +91,7 @@ export function decideSchemaAction(
         message:
           `Diese Datenbank enthaelt bereits Daten, aber keine Versionsangabe, und ` +
           `schema.sql steht auf ${fileVersion}. Ob die Aenderungen der Versionen 2..${fileVersion} ` +
-          `jemals angewandt wurden, laesst sich hier nicht feststellen — und stillschweigend ` +
+          `jemals angewandt wurden, laesst sich hier nicht feststellen - und stillschweigend ` +
           `${fileVersion} einzutragen wuerde genau den Fehler verdecken, gegen den diese ` +
           `Pruefung existiert.\nStimmt das Schema wirklich, dann von Hand bestaetigen:\n` +
           `  INSERT INTO academy_mcp_schema_meta (id, version) VALUES (TRUE, ${fileVersion});`,
@@ -105,7 +105,7 @@ export function decideSchemaAction(
       message:
         `Schema-Drift: die Datenbank steht auf Version ${dbVersion}, ` +
         `schema.sql verlangt ${fileVersion}. CREATE TABLE IF NOT EXISTS aendert ` +
-        `bestehende Tabellen NICHT — die noetigen ALTER-Anweisungen muessen von ` +
+        `bestehende Tabellen NICHT - die noetigen ALTER-Anweisungen muessen von ` +
         `Hand laufen, danach:\n` +
         `  UPDATE academy_mcp_schema_meta SET version = ${fileVersion}, applied_at = NOW() WHERE id = TRUE;\n` +
         `Bis dahin startet der Server nicht, statt mit halbem Schema zu laufen.`,
@@ -117,7 +117,7 @@ export function decideSchemaAction(
       message:
         `Die Datenbank steht auf Version ${dbVersion}, dieser Code ` +
         `erwartet ${fileVersion}. Das ist ein zurueckgerollter Deploy gegen eine ` +
-        `neuere Datenbank — abgebrochen, bevor etwas kaputtgeht.`,
+        `neuere Datenbank - abgebrochen, bevor etwas kaputtgeht.`,
     };
   }
   return { kind: "aktuell", version: fileVersion };
@@ -125,7 +125,7 @@ export function decideSchemaAction(
 
 /**
  * @param schemaSql Nur fuer Pruefungen: Schema-Text statt der Datei. Der
- * Bestandsdaten-Waechter greift erst ab Version 2 — mit der echten Datei
+ * Bestandsdaten-Waechter greift erst ab Version 2 - mit der echten Datei
  * (Version 1) laesst er sich also gar nicht beobachten, und eine Zusicherung,
  * die man nicht ausloesen kann, ist keine (Fable-R9, Mutations-Zeile 4b).
  */
@@ -134,9 +134,35 @@ export async function runMigration(schemaSql?: string): Promise<void> {
   const schema = schemaSql ?? readFileSync(findSqlFile("schema.sql"), "utf8");
   const fileVersion = parseSchemaVersion(schema);
 
+  const configured = new URL(process.env.ACADEMY_MCP_DATABASE_URL || process.env.DATABASE_URL || "");
+  if (!["academy_db", "academy_mcp", "academy_rebuild"].includes(decodeURIComponent(configured.pathname.slice(1)))) {
+    throw new Error("Refusing migration outside an explicitly named Academy database");
+  }
+  const identity = await db.query<{ database: string; server: string; port: number }>(
+    "SELECT current_database() AS database, inet_server_addr()::text AS server, inet_server_port() AS port",
+  );
+  if (identity.rows[0]?.database !== decodeURIComponent(configured.pathname.slice(1))) throw new Error("Database identity mismatch");
+  console.error(`[academy-migrate] verified database=${identity.rows[0].database} configured_host=${configured.hostname}:${configured.port || "5432"} server=${identity.rows[0].server}:${identity.rows[0].port}`);
+  const metadata = await db.query<{ present: string | null }>("SELECT to_regclass('academy_mcp_schema_meta')::text AS present");
+  const previous = metadata.rows[0]?.present
+    ? (await db.query<{ version: number }>("SELECT version FROM academy_mcp_schema_meta WHERE id=TRUE")).rows[0]?.version
+    : undefined;
+  if (previous !== undefined && previous !== 2 && previous !== fileVersion) {
+    throw new Error(`Unsupported schema transition ${previous} -> ${fileVersion}`);
+  }
+  if (previous === 2 && fileVersion === 3) {
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(88402943)");
+      await client.query(readFileSync(findSqlFile("oauth-grants-v3.sql"), "utf8"));
+      await client.query("UPDATE academy_mcp_schema_meta SET version=3,applied_at=NOW() WHERE id=TRUE AND version=2");
+      await client.query("COMMIT");
+    } catch(error) { await client.query("ROLLBACK"); throw error; } finally {client.release();}
+  }
   await db.query(schema);
 
-  // Erst NACH dem Anwenden lesen — auf einer frischen Datenbank entsteht die
+  // Erst NACH dem Anwenden lesen - auf einer frischen Datenbank entsteht die
   // Meta-Tabelle ja gerade eben in diesem Lauf.
   const current = await db.query<{ version: number }>(
     `SELECT version FROM academy_mcp_schema_meta WHERE id = TRUE`,
@@ -144,7 +170,7 @@ export async function runMigration(schemaSql?: string): Promise<void> {
   // Bestandsdaten erkennen: gibt es schon registrierte Clients oder lebende
   // Tokens, obwohl keine Versionsangabe existiert? Dann ist die Datenbank nicht
   // frisch, und das Eintragen der Datei-Version waere geraten statt gewusst
-  // (Fable-R9 #4). Wir pruefen nur eigene Tabellen — die Prisma-Tabellen der
+  // (Fable-R9 #4). Wir pruefen nur eigene Tabellen - die Prisma-Tabellen der
   // Academy gehoeren uns nicht und sind auf einer frischen Installation
   // ohnehin gefuellt, was hier ein falsches „Bestand" ergaebe.
   const bestand = await db.query<{ vorhanden: boolean }>(
@@ -177,7 +203,7 @@ export async function runMigration(schemaSql?: string): Promise<void> {
   }
 }
 
-// Nur laufen lassen, wenn direkt gestartet — sonst kann ein Test die
+// Nur laufen lassen, wenn direkt gestartet - sonst kann ein Test die
 // Hilfsfunktionen importieren, ohne eine Migration auszuloesen.
 const isDirectRun =
   process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1];

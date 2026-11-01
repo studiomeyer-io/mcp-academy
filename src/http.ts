@@ -1,40 +1,3 @@
-/**
- * http.ts — the hosted course at mcp.studiomeyer.academy.
- *
- * This is the half of the product that knows who you are. The npm package is
- * the library: the whole curriculum, offline, no account, nobody to be. Here
- * you sign in once and the course remembers you — progress, quizzes, review,
- * certificates. Same lessons, different promise.
- *
- * WHY /mcp ALWAYS DEMANDS A TOKEN. It would be tempting to let unauthenticated
- * callers read lessons here too and only gate the account tools. Two reasons
- * not to. First, it breaks discovery: a client that gets a 200 never learns
- * there is an authorization server, so nobody would ever sign in. The 401 with
- * WWW-Authenticate IS the login button — the server raises it, not the user.
- * Second, anonymous reading already has a home that is better at it: the npm
- * package, which needs no network at all.
- *
- * Request path, in order, because the order is the security:
- *
- *   handleOAuth        the sign-in routes themselves — never behind the token,
- *                      and deliberately NOT behind the origin check either
- *                      (in-app browsers send `Origin: null` and would be
- *                      locked out of the magic-link POST; they are protected
- *                      by rate limits and the mail budget instead)
- *   origin check       only on /mcp
- *   IP rate limit      BEFORE the token check, or the public 401 path is a
- *                      free, unmetered endpoint
- *   401 no bearer      + WWW-Authenticate pointing at the resource metadata
- *   401 bad bearer     same header, different body
- *   block list         a token minted before a block must stop working
- *   user rate limit    keyed on the person, not the address
- *   serve MCP          fresh server + transport per request, bound to the email
- *
- * Env: ACADEMY_MCP_PORT (default 3116), ACADEMY_MCP_HOST (default 127.0.0.1 —
- * it sits behind nginx), MCP_PATH (default /mcp), ACADEMY_MCP_BASE_URL (the
- * public URL, required unless bound to loopback).
- */
-
 import { createServer as createHttp, type IncomingMessage, type ServerResponse } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createServer, VERSION } from "./server.js";
@@ -43,7 +6,9 @@ import { validateEnvAtStartup } from "./core/startup-checks.js";
 import { getBaseUrl, getPort, getHost } from "./core/base-url.js";
 import { clientIp } from "./core/client-ip.js";
 import { checkIpRateLimit, checkUserRateLimit } from "./safety/rate-limit.js";
-import { isUserAllowed, touchLastSeen } from "./auth/users.js";
+import { isUserAllowed } from "./auth/users.js";
+import { authenticateBearer } from "./auth/oauth-persistence.js";
+import { failure } from "./academy-client.js";
 
 // Host comes from base-url.ts and NOWHERE else. A second copy here used `??`
 // where base-url.ts uses `||`: with ACADEMY_MCP_HOST set but EMPTY, this file
@@ -56,7 +21,7 @@ const MCP_PATH = process.env.MCP_PATH ?? "/mcp";
 
 /**
  * Clients that may drive this server from a browser. A request with no Origin
- * at all is allowed — native MCP clients do not send one, and rejecting them
+ * at all is allowed - native MCP clients do not send one, and rejecting them
  * would be rejecting almost everybody.
  */
 const ALLOWED_ORIGIN_RE =
@@ -77,17 +42,19 @@ function setCommonHeaders(res: ServerResponse, origin: string | undefined): void
     res.setHeader("Vary", "Origin");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "content-type, authorization, mcp-session-id, mcp-protocol-version");
-    // UPPERCASE is not cosmetic — lowercase breaks Claude.ai and Claude Desktop.
+    // UPPERCASE is not cosmetic - lowercase breaks Claude.ai and Claude Desktop.
     res.setHeader("Access-Control-Expose-Headers", "MCP-Session-ID, mcp-protocol-version, WWW-Authenticate");
   }
 }
 
 /** 401 with the pointer every MCP client follows to find the login. */
 function unauthorized(res: ServerResponse, body: Record<string, unknown>): void {
+  res.setHeader("X-Request-Id",String(body.request_id));
+  res.setHeader("Cache-Control","no-store");
   res.writeHead(401, {
     "Content-Type": "application/json",
     "WWW-Authenticate":
-      `Bearer resource_metadata="${getBaseUrl()}/.well-known/oauth-protected-resource"`,
+      `Bearer resource_metadata="${getBaseUrl()}/.well-known/oauth-protected-resource/mcp"`,
   });
   res.end(JSON.stringify(body));
 }
@@ -104,10 +71,10 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
-async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<void> {
+export async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (!isOriginAllowed(req.headers.origin)) {
     res.writeHead(403, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "origin_not_allowed" }));
+    res.end(JSON.stringify(failure("insufficient_scope",1002,"Origin is not allowed.","Use an authorized client.")));
     return;
   }
 
@@ -118,48 +85,24 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
   const ipRate = checkIpRateLimit(ip);
   if (!ipRate.ok) {
     res.writeHead(429, { "Content-Type": "application/json", "Retry-After": String(ipRate.retry_after_seconds ?? 60) });
-    res.end(JSON.stringify({ error: "rate_limited", retry_after: ipRate.retry_after_seconds }));
+    res.end(JSON.stringify(failure("rate_limited",1200,"Too many requests.","Wait for Retry-After before retrying.")));
     return;
   }
 
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    unauthorized(res, {
-      error: "auth_required",
-      error_description: "Sign in to take the course. The free curriculum is also available offline via `npx -y mcp-academy`.",
-      login_url: `${getBaseUrl()}/authorize`,
-    });
+  const free=new URL(req.url ?? "/mcp",getBaseUrl()).searchParams.get("access")==="free";
+  const verdict=free ? null : await checkBearerToken(req);
+  if(!free && !verdict?.ok) {
+    unauthorized(res,failure(req.headers.authorization ? "invalid_token" : "auth_required",req.headers.authorization ? 1001 : 1000,"Sign in to use personal Academy tools.","Connect with OAuth or use /mcp?access=free for public content."));
     return;
   }
-
-  const verdict = checkBearerToken(req);
-  if (!verdict.ok) {
-    unauthorized(res, { error: "invalid_or_expired_token" });
-    return;
-  }
-  const email = verdict.email;
-
-  // A block applied after the token was minted has to bite immediately —
-  // otherwise it takes up to an hour (access) or thirty days (refresh) to land.
-  // Fail closed: if we cannot check, we do not serve.
-  try {
-    if (!(await isUserAllowed(email))) {
-      res.writeHead(403, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "account_suspended" }));
-      return;
-    }
-  } catch (e) {
-    console.error(`[academy-http] block-list check failed (fail-closed):`, e);
-    res.writeHead(503, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "temporarily_unavailable" }));
-    return;
-  }
-
-  const userRate = checkUserRateLimit(email);
-  if (!userRate.ok) {
-    res.writeHead(429, { "Content-Type": "application/json", "Retry-After": String(userRate.retry_after_seconds ?? 60) });
-    res.end(JSON.stringify({ error: "rate_limited", retry_after: userRate.retry_after_seconds }));
-    return;
+  if(verdict?.ok) {
+    try {
+      if(!await isUserAllowed(verdict.email)) {
+        res.writeHead(403,{"Content-Type":"application/json"});res.end(JSON.stringify(failure("account_suspended",1004,"Account access is suspended.","Contact Academy support.")));return;
+      }
+    } catch {res.writeHead(503,{"Content-Type":"application/json"});res.end(JSON.stringify(failure("temporarily_unavailable",9002,"Authorization cannot be verified.","Retry later.")));return;}
+    const userRate=checkUserRateLimit(verdict.email);
+    if(!userRate.ok) {res.writeHead(429,{"Content-Type":"application/json","Retry-After":String(userRate.retry_after_seconds ?? 60)});res.end(JSON.stringify(failure("rate_limited",1200,"Too many requests.","Wait for Retry-After before retrying.")));return;}
   }
 
   if (req.method !== "POST" && req.method !== "GET") {
@@ -168,10 +111,9 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
     return;
   }
 
-  void touchLastSeen(email);
 
   const body = req.method === "POST" ? await readBody(req) : undefined;
-  const server = createServer({ courseFor: email });
+  const server = createServer({identity:verdict?.ok ? {grant:verdict,accessToken:verdict.accessToken,revalidate:()=>authenticateBearer(verdict.accessToken)} : null});
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on("close", () => {
     transport.close().catch(() => {});
@@ -188,7 +130,7 @@ export async function startHttp(): Promise<void> {
   validateEnvAtStartup();
 
   // Rehydrate BEFORE listen(). If the socket opens first, there is a window in
-  // which perfectly valid customer tokens get a 401 while /health reports 200 —
+  // which perfectly valid customer tokens get a 401 while /health reports 200 -
   // measured at several seconds on the sibling server. A failure here throws on
   // purpose (an empty state is indistinguishable from a lost one); the process
   // exits and the container restart policy tries again once the database is up.
@@ -200,7 +142,7 @@ export async function startHttp(): Promise<void> {
   const http = createHttp(async (req, res) => {
     // Everything inside the try, including the URL parse. A malformed Host
     // header or request target makes `new URL()` throw, and outside the try
-    // that becomes an unhandled rejection in an async handler — which takes
+    // that becomes an unhandled rejection in an async handler - which takes
     // the process down. One bad request should be a 400, not an outage.
     try {
       const origin = req.headers.origin;
@@ -219,7 +161,7 @@ export async function startHttp(): Promise<void> {
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({
           ok: true, server: "mcp-academy", version: VERSION,
-          transport: "streamable-http", mode: "course", auth: "oauth2.1",
+          transport: "streamable-http", mode: "live-academy", auth: "oauth2.1", public_endpoint: "/mcp?access=free",
         }));
         return;
       }
@@ -227,27 +169,27 @@ export async function startHttp(): Promise<void> {
       if (url.pathname === MCP_PATH) { await handleMcp(req, res); return; }
 
       res.writeHead(404, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: "not_found", hint: `MCP endpoint is ${MCP_PATH}` }));
+      res.end(JSON.stringify(failure("not_found",1101,"Endpoint not found.",`Use ${MCP_PATH} or ${MCP_PATH}?access=free.`)));
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      console.error(`[academy-http] ${req.method} ${req.url}: ${message}`);
+      console.error(`[academy-http] ${req.method}: request failed`);
       if (!res.headersSent) {
         // Only genuinely malformed input is the caller's fault. Everything else
         // (database down, OAuth layer throwing, SDK failure) is ours, and its
-        // message must not leave the process — it names internals.
+        // message must not leave the process - it names internals.
         // Eng gefasst: nur was der Aufrufer tatsaechlich verursacht haben
         // kann. Ein blankes `instanceof TypeError` faengt auch eigene
-        // Programmierfehler ein und meldet sie als 400 — dann sucht man den
+        // Programmierfehler ein und meldet sie als 400 - dann sucht man den
         // Bug beim Nutzer statt bei sich.
         const callerFault =
           e instanceof SyntaxError ||                       // kaputtes JSON im Body
           /payload too large|Invalid URL/i.test(message);   // zu gross / krankes Request-Target
         if (callerFault) {
           res.writeHead(400, { "content-type": "application/json" });
-          res.end(JSON.stringify({ error: "bad_request" }));
+          res.end(JSON.stringify(failure("validation_failed",1100,"Malformed request.","Check the JSON body and request URL.")));
         } else {
-          res.writeHead(500, { "content-type": "application/json" });
-          res.end(JSON.stringify({ error: "internal_error" }));
+          res.writeHead(503, { "content-type": "application/json" });
+          res.end(JSON.stringify(failure("temporarily_unavailable",9002,"Service unavailable.","Retry later.")));
         }
       } else {
         res.end();
@@ -261,7 +203,7 @@ export async function startHttp(): Promise<void> {
 
   // Ohne das hier beendet sich der Prozess bei SIGTERM nie von selbst: Docker
   // wartet zehn Sekunden und schiesst dann hart. Gemessen an genau diesem
-  // Container — 11s pro Neustart, laufende Anfragen mittendrin abgeschnitten,
+  // Container - 11s pro Neustart, laufende Anfragen mittendrin abgeschnitten,
   // der Datenbank-Pool nie geschlossen. Bei jedem Deploy.
   //
   // Reihenfolge zaehlt: erst keine neuen Verbindungen mehr annehmen, dann eine
@@ -271,7 +213,7 @@ export async function startHttp(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     if (shuttingDown) return;
     shuttingDown = true;
-    console.error(`[mcp-academy] ${signal} — fahre herunter`);
+    console.error(`[mcp-academy] ${signal} - fahre herunter`);
     // Notbremse: haengt eine Verbindung, wird trotzdem beendet, statt in den
     // harten Kill zu laufen.
     const force = setTimeout(() => {

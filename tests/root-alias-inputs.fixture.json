@@ -1,0 +1,42 @@
+[
+  {
+    "name": "academy_progress_complete",
+    "operation": "lessonDone",
+    "input": {
+      "level": 1,
+      "lessonSlug": "first-lesson"
+    },
+    "normalized": {
+      "level": 1,
+      "slug": "first-lesson"
+    }
+  },
+  {
+    "name": "academy_tutor_context",
+    "operation": "teach",
+    "input": {
+      "level": 1,
+      "lessonSlug": "first-lesson"
+    },
+    "normalized": {
+      "level": 1,
+      "slug": "first-lesson"
+    }
+  },
+  {
+    "name": "academy_levels",
+    "operation": "legacyLevels",
+    "input": {},
+    "normalized": {}
+  },
+  {
+    "name": "academy_lessons",
+    "operation": "legacyLessons",
+    "input": {
+      "level": 1
+    },
+    "normalized": {
+      "level": 1
+    }
+  }
+]
