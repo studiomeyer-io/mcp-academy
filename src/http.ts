@@ -91,7 +91,9 @@ export async function handleMcp(req: IncomingMessage, res: ServerResponse): Prom
     return;
   }
 
-  const free=new URL(req.url ?? "/mcp",getBaseUrl()).searchParams.get("access")==="free";
+  const access=new URL(req.url ?? "/mcp",getBaseUrl()).searchParams.get("access");
+  const docs=access==="docs";
+  const free=access==="free" || docs;
   const verdict=free ? null : await checkBearerToken(req);
   const rawBearer=req.headers.authorization?.match(/^Bearer ([^\s]+)$/i)?.[1];
   const anonymous=!free&&!verdict?.ok&&rawBearer&&agentIdentityEnabled()?await authenticateAnonymousAgent(rawBearer):false;
@@ -117,7 +119,7 @@ export async function handleMcp(req: IncomingMessage, res: ServerResponse): Prom
 
 
   const body = req.method === "POST" ? await readBody(req) : undefined;
-  const server = createServer({identity:verdict?.ok ? {grant:verdict,accessToken:verdict.accessToken,revalidate:()=>authenticateBearer(verdict.accessToken)} : null});
+  const server = createServer({mode:docs ? "docs" : "full",identity:verdict?.ok ? {grant:verdict,accessToken:verdict.accessToken,revalidate:()=>authenticateBearer(verdict.accessToken)} : null});
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on("close", () => {
     transport.close().catch(() => {});
@@ -165,7 +167,7 @@ export async function startHttp(): Promise<void> {
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({
           ok: true, server: "mcp-academy", version: VERSION,
-          transport: "streamable-http", mode: "live-academy", auth: "oauth2.1", public_endpoint: "/mcp?access=free",
+          transport: "streamable-http", mode: "live-academy", auth: "oauth2.1", public_endpoint: "/mcp?access=free", docs_endpoint: "/mcp?access=docs",
         }));
         return;
       }
