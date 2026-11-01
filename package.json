@@ -1,6 +1,6 @@
 {
   "name": "mcp-academy",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "mcpName": "io.studiomeyer/academy",
   "description": "Live StudioMeyer Academy MCP: public learning and search, OAuth-scoped personal tools, explicit --offline legacy library.",
   "type": "module",
@@ -21,10 +21,12 @@
     "start:http": "node dist/index.js --http",
     "smoke": "node scripts/smoke-test.mjs",
     "db:schema": "node dist-scripts/scripts/migrate.js",
-    "test": "node --import tsx --test tests/grants.test.ts tests/platform.test.ts tests/root-contract.test.ts",
+    "test": "node --import tsx --test tests/grants.test.ts tests/platform.test.ts tests/root-contract.test.ts tests/agent-protocol.test.ts",
     "test:auth-db": "node --import tsx --test tests/oauth-db.test.ts",
     "smoke:platform": "node scripts/platform-smoke.mjs",
-    "test:migration-db": "node --import tsx --test tests/oauth-migration.test.ts"
+    "test:migration-db": "node --import tsx --test tests/oauth-migration.test.ts",
+    "test:agent-protocol": "node --import tsx --test tests/agent-protocol.test.ts",
+    "test:agent-identity-db": "node --import tsx --test tests/agent-identity-db.test.ts"
   },
   "keywords": [
     "mcp",

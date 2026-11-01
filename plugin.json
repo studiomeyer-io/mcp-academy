@@ -1,0 +1,18 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "studiomeyer-academy",
+  "version": "0.6.0",
+  "description": "Free Academy learning and search, with optional human-approved personal OAuth access.",
+  "author": {
+    "name": "StudioMeyer",
+    "url": "https://studiomeyer.io"
+  },
+  "homepage": "https://studiomeyer.academy",
+  "repository": "https://github.com/studiomeyer-io/mcp-academy",
+  "license": "MIT",
+  "keywords": [
+    "learning",
+    "academy",
+    "mcp"
+  ]
+}

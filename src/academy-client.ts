@@ -124,6 +124,14 @@ export function toolsFor(registry:Registry,grant:Grant|null):Tool[] {
     return [...metadata.names,...metadata.deprecatedAliases].map(name=>({name,description:metadata.deprecatedAliases.includes(name) ? `${operation.description} (Deprecated alias for ${metadata.names[0]}; retained for one version.)` : operation.description,inputSchema:toolInputSchema(operation,name),outputSchema:envelopeOutputSchema(operation.outputSchema),annotations:metadata.annotations,...(metadata.deprecatedAliases.includes(name) ? {_meta:{deprecated:true,canonicalName:metadata.names[0]}} : {})}));
   });
 }
+/** Protocol errors are separate from operation execution/business errors. */
+export function validateToolCall(registry:Registry,name:string,input:Record<string,unknown>):Envelope|null {
+  const locale:AcademyLocale=input.locale==="en"||input.locale==="es"?input.locale:"de";
+  const operation=registry.operations.find(op=>op.mcp && [...op.mcp.names,...op.mcp.deprecatedAliases].includes(name));
+  if(!operation)return failure("not_found",1101,"Unknown tool.","Read tools/list for available tools.",locale);
+  if(!validator.getValidator(toolInputSchema(operation,name))(input).valid)return failure("validation_failed",1100,"Invalid tool arguments.","Read tools/list and use the declared fields and types.",locale);
+  return null;
+}
 export async function executeOperation(registry:Registry,name:string,input:Record<string,unknown>,identity:CallIdentity|null):Promise<Envelope> {
   const errorLocale:AcademyLocale=input.locale==="en" || input.locale==="es" ? input.locale : "de";
   const fail=(slug:string,code:number,message:string,hint:string)=>failure(slug,code,message,hint,errorLocale);

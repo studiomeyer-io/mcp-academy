@@ -1,3 +1,6 @@
+import { agentAuthMetadata,agentIdentityEnabled,ASSERTION_GRANT,CLAIM_GRANT } from "./agent-assertions.js";
+import { handleAgentIdentity } from "./agent-identity.js";
+import { AgentIdentityError,exchangeAgentAssertion,pollAgentClaim,revokeAgentAccess,cleanupAgentIdentities } from "./agent-identity-store.js";
 /** OAuth 2.1 public clients, S256 PKCE, browser-bound consent, DB-authoritative grants. */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { getBaseUrl } from "../core/base-url.js";
@@ -59,10 +62,11 @@ export async function hydrateOAuthState(): Promise<{clients:number;tokens:number
     (SELECT count(*) FROM academy_mcp_oauth_access_tokens WHERE expires_at>NOW())::text AS tokens`);
   await getDb().query("SELECT scopes,resource,grant_version,consented_at FROM academy_mcp_oauth_access_tokens LIMIT 0");
   await getDb().query("SELECT family_id FROM academy_mcp_oauth_revoked_families LIMIT 0");
+  if(agentIdentityEnabled())await getDb().query("SELECT id FROM academy_mcp_agent_registrations LIMIT 0");
   return {clients:Number(result.rows[0]?.clients ?? 0),tokens:Number(result.rows[0]?.tokens ?? 0)};
 }
 export function startOAuthCleanup(): NodeJS.Timeout {
-  return setInterval(()=>{void cleanupExpiredOAuthState().then(()=>cleanupExpiredProviderStates()).catch(()=>console.error("[academy-oauth] cleanup failed"));},300000).unref();
+  return setInterval(()=>{void cleanupExpiredOAuthState().then(()=>cleanupExpiredProviderStates()).then(()=>agentIdentityEnabled()?cleanupAgentIdentities():undefined).catch(()=>console.error("[academy-oauth] cleanup failed"));},300000).unref();
 }
 export async function checkBearerToken(req: IncomingMessage) {
   const raw=req.headers.authorization?.match(/^Bearer ([^\s]+)$/i)?.[1];
@@ -118,7 +122,8 @@ async function redirectCode(res:ServerResponse,authorization:Authorization,email
 export async function handleOAuth(req: IncomingMessage,res: ServerResponse):Promise<boolean> {
   const url=new URL(req.url ?? "/",getBaseUrl()); const path=url.pathname;
   if(req.method==="GET" && ["/.well-known/oauth-protected-resource","/.well-known/oauth-protected-resource/mcp"].includes(path)) return json(res,200,{resource:MCP_RESOURCE,authorization_servers:[getBaseUrl()],scopes_supported:SCOPES,bearer_methods_supported:["header"]});
-  if(req.method==="GET" && ["/.well-known/oauth-authorization-server","/.well-known/oauth-authorization-server/mcp"].includes(path)) return json(res,200,{issuer:getBaseUrl(),authorization_endpoint:`${getBaseUrl()}/authorize`,token_endpoint:`${getBaseUrl()}/token`,registration_endpoint:`${getBaseUrl()}/register`,revocation_endpoint:`${getBaseUrl()}/revoke`,response_types_supported:["code"],grant_types_supported:["authorization_code","refresh_token"],code_challenge_methods_supported:["S256"],token_endpoint_auth_methods_supported:["none"],scopes_supported:SCOPES,authorization_response_iss_parameter_supported:true});
+  if(req.method==="GET" && ["/.well-known/oauth-authorization-server","/.well-known/oauth-authorization-server/mcp"].includes(path)) return json(res,200,{issuer:getBaseUrl(),authorization_endpoint:`${getBaseUrl()}/authorize`,token_endpoint:`${getBaseUrl()}/token`,registration_endpoint:`${getBaseUrl()}/register`,revocation_endpoint:`${getBaseUrl()}/revoke`,response_types_supported:["code"],grant_types_supported:["authorization_code","refresh_token",...(agentIdentityEnabled()?[ASSERTION_GRANT,CLAIM_GRANT]:[])],code_challenge_methods_supported:["S256"],token_endpoint_auth_methods_supported:["none"],scopes_supported:SCOPES,authorization_response_iss_parameter_supported:true,...(agentAuthMetadata()?{agent_auth:agentAuthMetadata()}: {})});
+  if(await handleAgentIdentity(req,res))return true;
   if(!["/register","/authorize","/authorize/verify","/token","/revoke","/authorize/google/callback","/authorize/discord/callback"].includes(path)) return false;
   const rate=checkIpRateLimit(clientIp(req));if(!rate.ok){res.setHeader("Retry-After",String(rate.retry_after_seconds ?? 60));return oauthError(res,"temporarily_unavailable",429);}
   try {
@@ -149,10 +154,14 @@ export async function handleOAuth(req: IncomingMessage,res: ServerResponse):Prom
     }
     if(path==="/token" && req.method==="POST") {
       const form=await body(req);if(form.getAll("resource").length>1)return oauthError(res,"invalid_target");
+      if(agentIdentityEnabled()&&[ASSERTION_GRANT,CLAIM_GRANT].includes(form.get("grant_type")??"")) {
+        try {return json(res,200,form.get("grant_type")===ASSERTION_GRANT?await exchangeAgentAssertion(form):await pollAgentClaim(form));}
+        catch(error){if(error instanceof AgentIdentityError)return oauthError(res,error.code,error.status);throw error;}
+      }
       const result=form.get("grant_type")==="authorization_code" ? await redeemCode(form) : form.get("grant_type")==="refresh_token" ? await rotateRefresh(form) : null;
       if(!result)return oauthError(res,"unsupported_grant_type");return result.ok ? json(res,200,result.pair) : oauthError(res,result.error);
     }
-    if(path==="/revoke" && req.method==="POST") {const form=await body(req);await revokeToken(form.get("token") ?? "",form.get("client_id") ?? "");return json(res,200,{});}
+    if(path==="/revoke" && req.method==="POST") {const form=await body(req);if(agentIdentityEnabled()&&await revokeAgentAccess(form.get("token")??""))return json(res,200,{});await revokeToken(form.get("token") ?? "",form.get("client_id") ?? "");return json(res,200,{});}
     return oauthError(res,"invalid_request",405);
   } catch(error) {
     if(error instanceof SyntaxError || error instanceof Error && error.message==="invalid_request")return oauthError(res,"invalid_request");

@@ -1,8 +1,8 @@
 /** MCP metadata and execution are generated from the live Academy registry. */
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema,ListToolsRequestSchema,ListResourcesRequestSchema,ReadResourceRequestSchema,type CallToolResult,McpError,ErrorCode } from "@modelcontextprotocol/sdk/types.js";
-import { loadRegistry,toolsFor,executeOperation,readDocumentation,DOCUMENT_URIS,type CallIdentity,AcademyUnavailable,failure } from "./academy-client.js";
-export const VERSION="0.5.0";
+import { loadRegistry,toolsFor,executeOperation,readDocumentation,DOCUMENT_URIS,type CallIdentity,AcademyUnavailable,failure,validateToolCall } from "./academy-client.js";
+export const VERSION="0.6.0";
 export interface ServerOptions {identity?:CallIdentity|null}
 export function createServer(options:ServerOptions={}):Server {
   const identity=options.identity ?? null;
@@ -18,8 +18,13 @@ export function createServer(options:ServerOptions={}):Server {
   });
   server.setRequestHandler(CallToolRequestSchema,async(request):Promise<CallToolResult>=>{
     let envelope;
-    try {envelope=await executeOperation(await loadRegistry(),request.params.name,request.params.arguments ?? {},identity);}
-    catch(error) {envelope=error instanceof AcademyUnavailable ? error.envelope : failure("temporarily_unavailable",9002,"Academy service is unavailable.","Retry later.");}
+    try {
+      const registry=await loadRegistry(),input=request.params.arguments ?? {};
+      const invalid=validateToolCall(registry,request.params.name,input);
+      if(invalid)throw new McpError(ErrorCode.InvalidParams,invalid.errors[0].slug==="not_found"?"Unknown tool":"Invalid tool arguments",invalid);
+      envelope=await executeOperation(registry,request.params.name,input,identity);
+    }
+    catch(error) {if(error instanceof McpError)throw error;envelope=error instanceof AcademyUnavailable ? error.envelope : failure("temporarily_unavailable",9002,"Academy service is unavailable.","Retry later.");}
     return {content:[{type:"text",text:JSON.stringify(envelope)}],structuredContent:envelope,isError:!envelope.success};
   });
   server.setRequestHandler(ListResourcesRequestSchema,async()=>({resources:DOCUMENT_URIS.map(uri=>({uri,name:uri.split("/").at(-1)!,mimeType:"text/markdown"}))}));

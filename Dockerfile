@@ -36,7 +36,7 @@ COPY --from=build /app/data ./data
 # Schema + migration run at container start; without these the version guard
 # ships as a promise the image cannot keep.
 COPY --from=build /app/dist-scripts ./dist-scripts
-COPY scripts/schema.sql scripts/oauth-grants-v3.sql ./scripts/
+COPY scripts/schema.sql scripts/oauth-grants-v3.sql scripts/agent-identity-v4.sql ./scripts/
 
 # The code reads ACADEMY_MCP_HOST / ACADEMY_MCP_PORT (core/base-url.ts).
 # Plain HOST/PORT were left over from v0.3.0 and did nothing in v0.4.0: the
