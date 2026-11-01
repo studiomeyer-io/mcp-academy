@@ -147,18 +147,28 @@ export async function runMigration(schemaSql?: string): Promise<void> {
   const previous = metadata.rows[0]?.present
     ? (await db.query<{ version: number }>("SELECT version FROM academy_mcp_schema_meta WHERE id=TRUE")).rows[0]?.version
     : undefined;
-  if (previous !== undefined && previous !== 2 && previous !== fileVersion) {
+  if (previous !== undefined && previous !== 2 && previous !== 3 && previous !== fileVersion) {
     throw new Error(`Unsupported schema transition ${previous} -> ${fileVersion}`);
   }
-  if (previous === 2 && fileVersion === 3) {
+  if (previous !== undefined && previous < fileVersion && [3,4].includes(fileVersion)) {
     const client = await db.connect();
     try {
       await client.query("BEGIN");
       await client.query("SELECT pg_advisory_xact_lock(88402943)");
-      await client.query(readFileSync(findSqlFile("oauth-grants-v3.sql"), "utf8"));
-      await client.query("UPDATE academy_mcp_schema_meta SET version=3,applied_at=NOW() WHERE id=TRUE AND version=2");
+      let current=(await client.query<{version:number}>("SELECT version FROM academy_mcp_schema_meta WHERE id=TRUE FOR UPDATE")).rows[0]?.version;
+      if(current===2) {
+        await client.query(readFileSync(findSqlFile("oauth-grants-v3.sql"),"utf8"));
+        current=3;
+        await client.query("UPDATE academy_mcp_schema_meta SET version=3,applied_at=NOW() WHERE id=TRUE");
+      }
+      if(current===3 && fileVersion===4) {
+        await client.query(readFileSync(findSqlFile("agent-identity-v4.sql"),"utf8"));
+        current=4;
+        await client.query("UPDATE academy_mcp_schema_meta SET version=4,applied_at=NOW() WHERE id=TRUE");
+      }
+      if(current!==fileVersion)throw new Error("Unsupported additive schema transition");
       await client.query("COMMIT");
-    } catch(error) { await client.query("ROLLBACK"); throw error; } finally {client.release();}
+    } catch(error) {await client.query("ROLLBACK");throw error;} finally {client.release();}
   }
   await db.query(schema);
 

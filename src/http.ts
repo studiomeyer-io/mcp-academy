@@ -1,3 +1,5 @@
+import { agentIdentityEnabled } from "./auth/agent-assertions.js";
+import { authenticateAnonymousAgent } from "./auth/agent-identity-store.js";
 import { createServer as createHttp, type IncomingMessage, type ServerResponse } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createServer, VERSION } from "./server.js";
@@ -91,7 +93,9 @@ export async function handleMcp(req: IncomingMessage, res: ServerResponse): Prom
 
   const free=new URL(req.url ?? "/mcp",getBaseUrl()).searchParams.get("access")==="free";
   const verdict=free ? null : await checkBearerToken(req);
-  if(!free && !verdict?.ok) {
+  const rawBearer=req.headers.authorization?.match(/^Bearer ([^\s]+)$/i)?.[1];
+  const anonymous=!free&&!verdict?.ok&&rawBearer&&agentIdentityEnabled()?await authenticateAnonymousAgent(rawBearer):false;
+  if(!free && !anonymous && !verdict?.ok) {
     unauthorized(res,failure(req.headers.authorization ? "invalid_token" : "auth_required",req.headers.authorization ? 1001 : 1000,"Sign in to use personal Academy tools.","Connect with OAuth or use /mcp?access=free for public content."));
     return;
   }

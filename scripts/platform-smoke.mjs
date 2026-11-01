@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** Built CLI smoke: live default stdio and explicit legacy offline library. */
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import { createServer } from 'node:http';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -23,19 +24,19 @@ try{
   const live=new Client({name:'built-live-smoke',version:'1'});clients.push(live);
   await live.connect(new StdioClientTransport({command:process.execPath,args:['dist/index.js'],env}));
   assert.match(live.getInstructions(),/Standard language: de/);
-  assert.equal(live.getServerVersion().version,"0.5.0");
+  assert.equal(live.getServerVersion().version,JSON.parse(readFileSync(new URL("../package.json",import.meta.url))).version);
   const listed=await live.listTools();assert.deepEqual(listed.tools.map(tool=>tool.name),['academy_start','search','fetch','academy_welcome']);
   for(const [name,args] of [['academy_start',{}],['search',{query:'test'}],['fetch',{id:'test'}]]){
     const result=await live.callTool({name,arguments:args});assert.equal(result.isError,false);assert.equal(result.structuredContent.result.source,'live-mock');assert.equal(result.structuredContent.result.locale,'de');
   }
-  const privateCall=await live.callTool({name:'academy_notes',arguments:{}});assert.equal(privateCall.isError,true);
+  await assert.rejects(()=>live.callTool({name:'academy_notes',arguments:{}}),error=>error.code===-32602);
   assert.ok(reads>=5,'registry must be read from Academy at runtime');
   const offline=new Client({name:'built-offline-smoke',version:'1'});clients.push(offline);
   await offline.connect(new StdioClientTransport({command:process.execPath,args:['dist/index.js','--offline'],env}));
   assert.match(offline.getInstructions(),/Legacy offline curriculum snapshot/);
   assert.ok((await offline.listTools()).tools.some(tool=>tool.name==='academy_levels'));
   const levels=await offline.callTool({name:'academy_levels',arguments:{locale:'de'}});assert.ok(JSON.parse(levels.content[0].text).levels.length>0);
-  assert.equal((await offline.callTool({name:'academy_note_save',arguments:{}})).isError,true);
+  await assert.rejects(()=>offline.callTool({name:'academy_note_save',arguments:{}}),error=>error.code===-32602);
   console.log('PASS: built default stdio uses live registry/content, public search/fetch execute, private calls deny, explicit offline snapshot remains readable.');
 }finally{
   await Promise.all(clients.map(client=>client.close()));

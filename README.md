@@ -1,6 +1,6 @@
 # mcp-academy
 
-Implementation version: 0.5.0. No publication or deployment is implied.
+Implementation version: 0.6.0. No publication or deployment is implied.
 StudioMeyer Academy in your AI client. Public learning paths, lessons, library content and search are read live from [Academy](https://studiomeyer.academy). German is the default; English and Spanish are supported.
 
 Connect without signing in:
@@ -16,6 +16,10 @@ https://mcp.studiomeyer.academy/mcp
 ```
 
 The protected endpoint returns `401` with OAuth discovery. Public clients use PKCE S256 and no client secret. The person selects `learn:read`, `learn:write` and, optionally, `credits:spend`. Spending is unchecked by default. Each credit operation also needs the service-declared quote consent (`consent.userConfirmed`, `consent.quoteId`, `consent.maximumCredits`) and a unique `idempotencyKey`; show the current quote first. Stored spending approvals remain Academy business rules. `academy_my_access` describes the actual grant.
+
+Agent integration instructions: [AGENTS.md](./AGENTS.md). Agent Plugins 1.0.0: [plugin.json](./plugin.json) and [mcp.json](./mcp.json). The plugin uses the standard remote Streamable HTTP transport and the existing OAuth-protected endpoint; no credentials are embedded.
+
+Where authorization-server metadata advertises `agent_auth`, an agent can register anonymously and later be claimed by the intended human. Anonymous access has **no personal scopes**: `learn:read` exposes private Academy records and is never anonymous. The claim verifies the intended email in the same browser, requires the code supplied by the agent and lets the person select learning permissions. Spending is absent and requires a separate ordinary OAuth connection. The free endpoint above remains available without any registration.
 
 ## Local MCP clients
 
@@ -57,7 +61,7 @@ MCP resources:
 - `academy://docs/errors`
 - `academy://docs/package-format`
 
-These read Academy's machine documents at request time. The service output schema describes `result`. Each MCP tool wraps it in an honest success/error envelope schema with `type: object` and `oneOf`. `locale` and `idempotencyKey` are MCP transport fields: locale goes into the bridge envelope, and the key becomes the HTTP `Idempotency-Key` header; neither is added to strict service input. Tool results carry the same `{success,result,errors,messages,request_id}` envelope as REST in `structuredContent` and text, with `isError` set for failures. Errors include stable `code`, `slug`, `message`, `hint` and `documentation_url` fields. OAuth endpoints retain their standard OAuth error format.
+These read Academy's machine documents at request time. The service output schema describes `result`. Each MCP tool wraps it in an honest success/error envelope schema with `type: object` and `oneOf`. `locale` and `idempotencyKey` are MCP transport fields: locale goes into the bridge envelope, and the key becomes the HTTP `Idempotency-Key` header; neither is added to strict service input. Tool results carry the same `{success,result,errors,messages,request_id}` envelope as REST in `structuredContent` and text, with `isError` set for failures. Errors include stable `code`, `slug`, `message`, `hint` and `documentation_url` fields. Unknown tool names and arguments that violate the published schema are JSON-RPC `-32602` errors with an English protocol message and the localized Academy envelope in `error.data`. Execution failures, missing content and paywalls remain `isError` results. OAuth endpoints retain their standard OAuth error format.
 
 ## Hosted configuration
 
@@ -70,7 +74,7 @@ npm run db:schema
 npm run start:http
 ```
 
-`db:schema` must point at the intended Academy database. On databases containing real data, take a verified backup before applying the additive migration. The runner checks the configured host and `current_database()` and supports the explicit schema v2 to v3 transition. It never runs Prisma migrations or removes tables. No deployment or publication is implied by these commands.
+`db:schema` must point at the intended Academy database. On databases containing real data, take a verified backup before applying the additive migration. The runner checks the configured host and `current_database()` and supports fresh schema v4 and the additive v2 to v3 to v4 and v3 to v4 transitions. It never runs Prisma migrations or removes tables. No deployment or publication is implied by these commands.
 
 | Environment | Purpose |
 |---|---|
@@ -82,6 +86,7 @@ npm run start:http
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Existing magic-link mail configuration. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional Google login. |
 | `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` | Optional Discord login. |
+| `ACADEMY_AGENT_ASSERTION_SECRET` | Dedicated persistent random signing secret, at least 32 random bytes encoded as base64url. Enables the anonymous registration/claim profile; do not reuse other service credentials. |
 | `ACADEMY_MCP_TRUSTED_IP_HEADER` | Existing reverse-proxy IP policy; configure only with a verified trusted proxy. |
 
 A personal call sends the real user Bearer plus `X-Academy-Service-Authorization: Bearer <service token>` to `/api/academy/execute`. Public calls send neither. Academy independently checks audience, scopes, revocation and blocking against the same database. The MCP and REST resources are distinct: `https://mcp.studiomeyer.academy/mcp` and `https://studiomeyer.academy/v1`.
@@ -95,6 +100,8 @@ npm run smoke:platform
 # With only the isolated test database configured:
 npm run test:auth-db
 npm run test:migration-db
+npm run test:agent-identity-db
+npm run test:agent-protocol
 ```
 
 The DB tests require exactly `127.0.0.1:3431/academy_rebuild` and use synthetic `example.com` identities. They cover real transactions, restart, parallel redemption, refresh replay, narrowing, audience checks, revocation, browser binding and consent. Mail is replaced with a test transport. The SDK tests include a 52-operation index fixture imported from the actual Academy registry and real legacy-input normalization fixtures, with source hashes recorded in `tests/root-fixture-provenance.json`. They cover object-union credit results and personal zero-scope access. The SDK tests use a local mock Academy API; they do not claim a completed cross-repository integration or live deployment.
@@ -104,3 +111,7 @@ The older `npm run smoke` script is retained unchanged as a historical contract 
 The server code is MIT licensed. Content licensing comes from Academy's content/package metadata; this package does not establish new rights for Academy content.
 
 Implementation details, integration evidence and deployment boundaries: [agent platform contract](docs/claude/agent-platform.md).
+
+## Public tool-list choice
+
+The existing free tool list is preserved. The real registry fixture has 52 operations, 56 MCP names including aliases, and 29 public tools. Keeping it preserves installed clients and the learning workflow, while a docs-only scanner can still warn about size. A separate `search`/`fetch` docs endpoint would keep the current interface intact and offer a smaller discovery surface, but requires another endpoint with its own documented contract. Consolidating current tools would simplify selection but needs an explicit compatibility and migration decision. Neither alternative is implemented or advertised here. Every current output schema is independently compiled through the installed MCP SDK validator; no external `$ref` is required.
