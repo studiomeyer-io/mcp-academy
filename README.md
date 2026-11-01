@@ -1,57 +1,29 @@
-<!-- studiomeyer-mcp-stack-banner:start -->
-> **Part of the [StudioMeyer MCP Stack](https://studiomeyer.io)** — Built in Mallorca 🌴 · ⭐ if you use it
-<!-- studiomeyer-mcp-stack-banner:end -->
-
 # mcp-academy
 
-<!-- badges -->
-[![npm version](https://img.shields.io/npm/v/mcp-academy?style=flat-square&color=cb3837&logo=npm&label=npm)](https://www.npmjs.com/package/mcp-academy)
-[![npm downloads](https://img.shields.io/npm/dm/mcp-academy?style=flat-square&color=cb3837&logo=npm&label=installs%2Fmo)](https://www.npmjs.com/package/mcp-academy)
-![License](https://img.shields.io/github/license/studiomeyer-io/mcp-academy?style=flat-square&color=22c55e&label=license)
-![Last commit](https://img.shields.io/github/last-commit/studiomeyer-io/mcp-academy?style=flat-square&color=88c0d0&label=updated)
-![GitHub stars](https://img.shields.io/github/stars/studiomeyer-io/mcp-academy?style=flat-square&color=ffd700&logo=github&label=stars)
-<!-- /badges -->
+Implementation version: 0.5.0. No publication or deployment is implied.
+StudioMeyer Academy in your AI client. Public learning paths, lessons, library content and search are read live from [Academy](https://studiomeyer.academy). German is the default; English and Spanish are supported.
 
-**Take the StudioMeyer Academy "Memory-First AI Operator" course right inside your AI.** Claude, ChatGPT, Cursor or Codex becomes your tutor — it pulls the lessons, explains them, answers your questions, and walks you through building real things.
+Connect without signing in:
 
-The whole curriculum ships **inside this package**: 6 levels, 63 lessons (DE/EN/ES), 104 hands-on playbooks, 63 build recipes. **No account, no API key, no database, no network needed to learn.** It's free and open source.
-
-- **Levels 1–3** — fundamentals: what LLMs really do, prompting, simple automation.
-- **Levels 4–6** — the part almost nobody teaches: persistent memory, the MCP protocol, hooks & skills, multi-agent systems, and building + selling your own MCP server.
-
-Academy lives at <https://studiomeyer.academy>.
-
-## Library or course — pick one
-
-This package is the **library**: the curriculum, offline, in your editor, with nobody to sign in as. Read everything, in three languages, forever, for free.
-
-If you want the **course** — progress that survives the session, quizzes, certificates, a tutor that knows where you left off — connect the hosted server instead:
-
+```text
+https://mcp.studiomeyer.academy/mcp?access=free
 ```
+
+Connect with OAuth for personal learning, notes, quizzes, purchased content and credits:
+
+```text
 https://mcp.studiomeyer.academy/mcp
 ```
 
-It asks you to sign in once (Google, Discord, or a link by email), and that is the whole difference. Same lessons, plus a memory of your way through them. Both are free.
+The protected endpoint returns `401` with OAuth discovery. Public clients use PKCE S256 and no client secret. The person selects `learn:read`, `learn:write` and, optionally, `credits:spend`. Spending is unchecked by default. Each credit operation also needs the service-declared quote consent (`consent.userConfirmed`, `consent.quoteId`, `consent.maximumCredits`) and a unique `idempotencyKey`; show the current quote first. Stored spending approvals remain Academy business rules. `academy_my_access` describes the actual grant.
 
-## A note from us
-
-We have been building tools and systems for ourselves for the past two years. The fact that this repo is small and has few stars is not because it is new. It is because we only just decided to share what we have built. It is not a fresh experiment, it is a long story with a recent commit.
-
-We love building things and sharing them. We do not love social media tactics, growth hacks, or chasing stars and followers. So this repo is small. The code is real, it gets used, issues get answered. Judge for yourself.
-
-From a small studio in Palma de Mallorca.
-
-## Quick start
-
-### Claude Code
+## Local MCP clients
 
 ```bash
-claude mcp add academy -s user -- npx -y mcp-academy
+npx -y mcp-academy
 ```
 
-Then just say: *"Start the Academy."* Your assistant calls `academy_welcome` and you're learning.
-
-### Cursor / Claude Desktop / Codex
+Default stdio is live and public. It requires network access to Academy. For Claude Desktop, Cursor or another stdio client:
 
 ```json
 {
@@ -64,59 +36,67 @@ Then just say: *"Start the Academy."* Your assistant calls `academy_welcome` and
 }
 ```
 
-### ChatGPT (and other remote connectors)
+Start with `academy_start`. Tool names, result schemas, public/account visibility, annotations, required scopes and deprecated aliases come from the live [operation registry](https://studiomeyer.academy/v1). Personal tools are absent from the free tool list and cannot be invoked directly without permission. Old learning and quiz names remain available only as the aliases declared by that registry for the compatibility version. Certificates, XP, rankings and arena remain dormant.
 
-ChatGPT connects to a hosted URL, not a local command. Add a connector pointing at:
-
-```
-https://mcp.studiomeyer.academy/mcp
-```
-
-You sign in once when you add it (Google, Discord, or a link by email) and the course then remembers your progress. If you would rather not sign in at all, use the npm package above — it carries the same curriculum offline.
-
-## What you can do (free, no account)
-
-| Tool | What it does |
-|------|--------------|
-| `academy_welcome` | Orientation — call this first |
-| `academy_levels` | The 6-level learning path |
-| `academy_lessons` / `academy_lesson` | List a level / read a full lesson |
-| `academy_playbooks` / `academy_playbook` | Hands-on how-tos |
-| `academy_recipes` / `academy_recipe` | Step-by-step build guides |
-| `academy_search` | Search the whole curriculum |
-| `academy_tutor_context` | Get a lesson packaged for tutoring — your AI teaches it |
-| `search` / `fetch` | The ChatGPT connector contract (read course material) |
-
-All locales: `de`, `en`, `es` (default `en`).
-
-## Optional: track your progress (account)
-
-If you have a [studiomeyer.academy](https://studiomeyer.academy) account, add your API key over **stdio** to unlock personal progress, quizzes, spaced-repetition and certificates:
+For the preserved historical curriculum snapshot, explicitly opt in:
 
 ```bash
-claude mcp add academy -s user --env ACADEMY_API_KEY=academy_xxx -- npx -y mcp-academy
+npx -y mcp-academy --offline
+# Alternative: ACADEMY_OFFLINE=1 npx -y mcp-academy
 ```
 
-Create a key at <https://studiomeyer.academy/dashboard/keys>. This adds: `academy_stats`, `academy_next_lesson`, `academy_progress_complete`, `academy_quiz`, `academy_quiz_submit`, `academy_review`, `academy_review_grade`, `academy_certificates`, `academy_tutor` (Pro). These talk to the Academy REST bridge with your Bearer token. The hosted course at `mcp.studiomeyer.academy` offers the same tools without any key — it signs you in via OAuth instead, which is the friendlier route.
+The offline library is read-only, can be outdated and needs no network or account. Its old level names describe that snapshot, not today's live Academy. `ACADEMY_API_KEY` no longer grants personal access; existing configurations receive a migration notice. Use the hosted OAuth connection for personal tools.
 
-> `ACADEMY_BASE_URL` defaults to `https://studiomeyer.academy` and should only ever point at the real Academy origin (it's where your key is sent). Useful for pointing at a local Academy instance during development.
+## Live documentation
 
-## Run your own HTTP endpoint
+MCP resources:
+
+- `academy://docs/quickstart`
+- `academy://docs/errors`
+- `academy://docs/package-format`
+
+These read Academy's machine documents at request time. The service output schema describes `result`. Each MCP tool wraps it in an honest success/error envelope schema with `type: object` and `oneOf`. `locale` and `idempotencyKey` are MCP transport fields: locale goes into the bridge envelope, and the key becomes the HTTP `Idempotency-Key` header; neither is added to strict service input. Tool results carry the same `{success,result,errors,messages,request_id}` envelope as REST in `structuredContent` and text, with `isError` set for failures. Errors include stable `code`, `slug`, `message`, `hint` and `documentation_url` fields. OAuth endpoints retain their standard OAuth error format.
+
+## Hosted configuration
+
+Run the HTTP service behind the existing reverse proxy, bound to loopback:
 
 ```bash
-ACADEMY_MCP_PORT=3116 npx -y mcp-academy --http   # the hosted course: OAuth required, needs Postgres
+npm ci
+npm run build
+npm run db:schema
+npm run start:http
 ```
 
-Stateless Streamable HTTP, one isolated session per request, behind a reverse proxy. Every `/mcp` request needs a Bearer token — the server answers `401` with a `WWW-Authenticate` header and clients follow it into the sign-in flow by themselves. It therefore needs Postgres (`ACADEMY_MCP_DATABASE_URL`, pointed at the Academy's own database), a public `ACADEMY_MCP_BASE_URL`, SMTP for magic links, and Google/Discord credentials if you want those buttons. `ACADEMY_API_KEY` is ignored here — one shared key cannot stand for every caller.
+`db:schema` must point at the intended Academy database. On databases containing real data, take a verified backup before applying the additive migration. The runner checks the configured host and `current_database()` and supports the explicit schema v2 to v3 transition. It never runs Prisma migrations or removes tables. No deployment or publication is implied by these commands.
 
-## How it stays fresh & safe
+| Environment | Purpose |
+|---|---|
+| `ACADEMY_BASE_URL` | Trusted Academy origin; defaults to `https://studiomeyer.academy`. Only HTTPS or loopback HTTP is accepted. |
+| `ACADEMY_MCP_DATABASE_URL` | Academy's shared database containing `academy_mcp_*` OAuth tables. |
+| `ACADEMY_MCP_SERVICE_TOKEN` | Additional service authorization for personal execute calls. It never substitutes for the user's access token. |
+| `ACADEMY_MCP_BASE_URL` | Public issuer URL, `https://mcp.studiomeyer.academy`. |
+| `ACADEMY_MCP_HOST` / `ACADEMY_MCP_PORT` | Bind address and port; defaults `127.0.0.1:3116`. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Existing magic-link mail configuration. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional Google login. |
+| `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` | Optional Discord login. |
+| `ACADEMY_MCP_TRUSTED_IP_HEADER` | Existing reverse-proxy IP policy; configure only with a verified trusted proxy. |
 
-The curriculum is baked into the package at build time from the live Academy content (`npm run bundle`), behind a hard source whitelist + a secret-leak gate that aborts the build on any real-looking credential. Quiz answer keys and the AI-tutor system prompt are **never** bundled — they live server-side and are only reachable with your own account key.
+A personal call sends the real user Bearer plus `X-Academy-Service-Authorization: Bearer <service token>` to `/api/academy/execute`. Public calls send neither. Academy independently checks audience, scopes, revocation and blocking against the same database. The MCP and REST resources are distinct: `https://mcp.studiomeyer.academy/mcp` and `https://studiomeyer.academy/v1`.
 
-## About StudioMeyer
+## Verification
 
-[StudioMeyer](https://studiomeyer.io) is an AI and design studio in Palma de Mallorca, working with clients worldwide. We build custom websites and AI infrastructure for small and medium businesses. Source: [studiomeyer-io/mcp-academy](https://github.com/studiomeyer-io/mcp-academy). Issues and PRs welcome — hello@studiomeyer.io.
+```bash
+npm run build
+npm test
+npm run smoke:platform
+# With only the isolated test database configured:
+npm run test:auth-db
+npm run test:migration-db
+```
 
-## License
+The DB tests require exactly `127.0.0.1:3431/academy_rebuild` and use synthetic `example.com` identities. They cover real transactions, restart, parallel redemption, refresh replay, narrowing, audience checks, revocation, browser binding and consent. Mail is replaced with a test transport. The SDK tests include a 52-operation index fixture imported from the actual Academy registry and real legacy-input normalization fixtures, with source hashes recorded in `tests/root-fixture-provenance.json`. They cover object-union credit results and personal zero-scope access. The SDK tests use a local mock Academy API; they do not claim a completed cross-repository integration or live deployment.
 
-MIT © StudioMeyer
+The older `npm run smoke` script is retained unchanged as a historical contract check. Its implicit-offline, all-authenticated hosted and API-key expectations describe the previous product; `smoke:platform` verifies the rebuilt contract.
+
+The server code is MIT licensed. Content licensing comes from Academy's content/package metadata; this package does not establish new rights for Academy content.

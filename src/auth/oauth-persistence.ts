@@ -1,224 +1,150 @@
-/**
- * OAuth state persistence on Postgres (academy_mcp_oauth_*).
- *
- * Fire-and-forget writes alongside in-memory Maps + boot-time rehydrate.
- * Repliziert aus ki-station src/auth/oauth-persistence.ts.
- *
- * **Token-Hashing:** Tokens (access + refresh + magic-link + auth-code) werden
- * als SHA-256-Hashes (hex) gespeichert, nie Klartext — und die in-memory Maps
- * in oauth.ts sind auf denselben Hash gekeyt. Ein eingehender Bearer wird
- * gehasht und per Hash nachgeschlagen; Klartext existiert nur im Transit.
- *
- * Daraus folgt zweierlei: ein Datenbank-Abzug laesst sich nicht gegen den
- * Server abspielen, UND rehydrierte Sitzungen funktionieren nach einem
- * Neustart weiter (es muss ja nichts entschluesselt werden). Die Referenz
- * traegt an dieser Stelle noch einen Kommentar aus der Zeit vor der
- * Hash-Umstellung, der das Gegenteil behauptet — der ist falsch und wurde
- * hier bewusst nicht uebernommen.
- */
-
-import { getDb } from "../db.js";
+/** DB-authoritative OAuth state. Security writes complete before returning. */
+import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
+import type { PoolClient } from "pg";
+import { getDb, withClient } from "../db.js";
 import { hashToken } from "./token-hash.js";
+import { type Grant, normalizeGrant, narrowGrant, MCP_RESOURCE } from "./grants.js";
 
-export interface PersistedClient {
-  client_id: string;
-  client_name: string;
-  redirect_uris: string[];
-  created_at: number;
+export interface Client { client_id: string; client_name: string; redirect_uris: string[]; created_at?: Date }
+export interface Authorization extends Grant {
+  client_id: string; redirect_uri: string; code_challenge: string; state: string;
+  browser_hash: string; csrf_hash?: string; email?: string;
 }
+interface TokenRow extends Grant { token: string; client_id: string; email: string; family_id: string | null; access_token?: string; expires_at: Date }
+interface CodeRow extends Grant { client_id: string; email: string; redirect_uri: string; code_challenge: string; expires_at: Date }
+export interface TokenPair { access_token: string; refresh_token: string; token_type: "Bearer"; expires_in: number; scope: string; resource: string }
+export type ExchangeResult = { ok: true; pair: TokenPair } | { ok: false; error: string };
+export const randomToken = (): string => randomBytes(32).toString("base64url");
 
-export interface PersistedAuthCode {
-  client_id: string;
-  redirect_uri: string;
-  code_challenge: string;
-  email: string;
-  expires_at: number;
+async function transaction<T>(run: (db: PoolClient) => Promise<T>): Promise<T> {
+  return withClient(async db => {
+    await db.query("BEGIN");
+    try { const result = await run(db); await db.query("COMMIT"); return result; }
+    catch (error) { await db.query("ROLLBACK"); throw error; }
+  });
 }
-
-export interface PersistedAccessToken {
-  client_id: string;
-  email: string;
-  /** Shared by every token descended from one authorization — see schema.sql. */
-  family_id?: string;
-  created_at: number;
-  expires_at: number;
+export async function saveClient(client: Client): Promise<void> {
+  await transaction(async db => {
+    // One database-wide lock makes the DCR cap safe across processes.
+    await db.query("SELECT pg_advisory_xact_lock(88402942)");
+    const count = await db.query<{ count: string }>("SELECT count(*) FROM academy_mcp_oauth_clients");
+    const cap = Number(process.env.ACADEMY_MCP_MAX_OAUTH_CLIENTS ?? 10000);
+    if (Number(count.rows[0]?.count) >= cap) throw new Error("client_limit_reached");
+    await db.query("INSERT INTO academy_mcp_oauth_clients(client_id,client_name,redirect_uris) VALUES($1,$2,$3)", [client.client_id, client.client_name, JSON.stringify(client.redirect_uris)]);
+  });
 }
-
-export interface PersistedRefreshToken {
-  client_id: string;
-  email: string;
-  access_token: string;
-  family_id?: string;
-  created_at: number;
-  expires_at: number;
+export async function getClient(id: string): Promise<Client | null> {
+  const result = await getDb().query<Client>("SELECT client_id,client_name,redirect_uris FROM academy_mcp_oauth_clients WHERE client_id=$1", [id]);
+  return result.rows[0] ?? null;
 }
-
-export interface PersistedMagicLink {
-  email: string;
-  client_id: string;
-  redirect_uri: string;
-  state: string;
-  code_challenge: string;
-  expires_at: number;
+export async function saveAuthorization(id: string, value: Authorization, csrfHash: string): Promise<void> {
+  await getDb().query(`INSERT INTO academy_mcp_oauth_authorizations(id,client_id,redirect_uri,code_challenge,state,scopes,resource,browser_hash,csrf_hash,expires_at)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW()+INTERVAL '10 minutes')`, [hashToken(id), value.client_id, value.redirect_uri, value.code_challenge, value.state, value.scopes, value.resource, value.browser_hash, csrfHash]);
 }
-
-function warn(label: string, err: unknown): void {
-  console.error(`[academy-oauth-persist] ${label}: ${(err as Error)?.message ?? err}`);
+export async function consumeAuthorization(id: string, browserHash: string, csrfHash: string): Promise<Authorization | null> {
+  const result = await getDb().query<Authorization>(`DELETE FROM academy_mcp_oauth_authorizations WHERE id=$1 AND browser_hash=$2 AND csrf_hash=$3 AND expires_at>NOW() RETURNING *`, [hashToken(id), browserHash, csrfHash]);
+  return result.rows[0] ?? null;
 }
-function toIso(ms: number): string { return new Date(ms).toISOString(); }
-
-export function saveClient(c: PersistedClient): void {
-  const db = getDb();
-  void db.query(
-    `INSERT INTO academy_mcp_oauth_clients (client_id, client_name, redirect_uris, created_at)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (client_id) DO UPDATE SET
-       client_name = EXCLUDED.client_name,
-       redirect_uris = EXCLUDED.redirect_uris`,
-    [c.client_id, c.client_name, JSON.stringify(c.redirect_uris), toIso(c.created_at)],
-  ).catch((err: unknown) => warn("saveClient", err));
+export async function saveMagicLink(token: string, value: Authorization & { email: string }): Promise<void> {
+  await getDb().query(`INSERT INTO academy_mcp_oauth_magic_links(token,email,client_id,redirect_uri,state,code_challenge,scopes,resource,grant_version,consented_at,browser_hash,expires_at)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW()+INTERVAL '10 minutes')`, [hashToken(token),value.email,value.client_id,value.redirect_uri,value.state,value.code_challenge,value.scopes,value.resource,value.grant_version,value.consented_at,value.browser_hash]);
 }
-
-export function saveAuthCode(code: string, v: PersistedAuthCode): void {
-  const db = getDb();
-  void db.query(
-    `INSERT INTO academy_mcp_oauth_auth_codes (code, client_id, redirect_uri, code_challenge, email, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     ON CONFLICT (code) DO UPDATE SET
-       client_id = EXCLUDED.client_id,
-       redirect_uri = EXCLUDED.redirect_uri,
-       code_challenge = EXCLUDED.code_challenge,
-       email = EXCLUDED.email,
-       expires_at = EXCLUDED.expires_at`,
-    [hashToken(code), v.client_id, v.redirect_uri, v.code_challenge, v.email, toIso(v.expires_at)],
-  ).catch((err: unknown) => warn("saveAuthCode", err));
+export async function consumeMagicLink(token: string, browserHash: string): Promise<Authorization | null> {
+  const result = await getDb().query<Authorization>(`DELETE FROM academy_mcp_oauth_magic_links WHERE token=$1 AND browser_hash=$2 AND expires_at>NOW() RETURNING *`, [hashToken(token),browserHash]);
+  return result.rows[0] ?? null;
 }
-/** Internal-cleanup variant where we already hold the hash (in-memory Map key). */
-export function deleteAuthCodeByHash(hash: string): void {
-  void getDb().query(`DELETE FROM academy_mcp_oauth_auth_codes WHERE code = $1`, [hash])
-    .catch((err: unknown) => warn("deleteAuthCodeByHash", err));
+export async function saveAuthCode(value: Authorization & { email: string }): Promise<string> {
+  const token = randomToken();
+  await getDb().query(`INSERT INTO academy_mcp_oauth_auth_codes(code,client_id,redirect_uri,code_challenge,email,scopes,resource,grant_version,consented_at,expires_at)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW()+INTERVAL '5 minutes')`, [hashToken(token),value.client_id,value.redirect_uri,value.code_challenge,value.email,value.scopes,value.resource,value.grant_version,value.consented_at]);
+  return token;
 }
-
-export function saveAccessToken(token: string, v: PersistedAccessToken): void {
-  void getDb().query(
-    `INSERT INTO academy_mcp_oauth_access_tokens (token, client_id, email, family_id, created_at, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     ON CONFLICT (token) DO UPDATE SET expires_at = EXCLUDED.expires_at`,
-    [hashToken(token), v.client_id, v.email, v.family_id ?? null, toIso(v.created_at), toIso(v.expires_at)],
-  ).catch((err: unknown) => warn("saveAccessToken", err));
+async function familyLock(db: PoolClient, family: string): Promise<void> {
+  await db.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [family]);
 }
-export function deleteAccessTokenByHash(hash: string): void {
-  void getDb().query(`DELETE FROM academy_mcp_oauth_access_tokens WHERE token = $1`, [hash])
-    .catch((err: unknown) => warn("deleteAccessTokenByHash", err));
+async function revokeFamily(db: PoolClient, family: string): Promise<void> {
+  await db.query("INSERT INTO academy_mcp_oauth_revoked_families(family_id) VALUES($1) ON CONFLICT DO NOTHING", [family]);
+  await db.query(`INSERT INTO academy_mcp_oauth_refresh_tombstones(token,family_id,client_id,expires_at)
+    SELECT token,COALESCE(family_id,access_token),client_id,expires_at FROM academy_mcp_oauth_refresh_tokens WHERE COALESCE(family_id,access_token)=$1 ON CONFLICT DO NOTHING`, [family]);
+  await db.query("DELETE FROM academy_mcp_oauth_access_tokens WHERE COALESCE(family_id,token)=$1", [family]);
+  await db.query("DELETE FROM academy_mcp_oauth_refresh_tokens WHERE COALESCE(family_id,access_token)=$1", [family]);
 }
-
-export function saveRefreshToken(token: string, v: PersistedRefreshToken): void {
-  void getDb().query(
-    `INSERT INTO academy_mcp_oauth_refresh_tokens (token, client_id, email, access_token, family_id, created_at, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
-     ON CONFLICT (token) DO UPDATE SET
-       access_token = EXCLUDED.access_token,
-       expires_at = EXCLUDED.expires_at`,
-    [hashToken(token), v.client_id, v.email, hashToken(v.access_token), v.family_id ?? null, toIso(v.created_at), toIso(v.expires_at)],
-  ).catch((err: unknown) => warn("saveRefreshToken", err));
+async function issuePair(db: PoolClient, row: { client_id: string; email: string }, grant: Grant, family: string): Promise<TokenPair> {
+  const access = randomToken(); const refresh = randomToken();
+  await db.query(`INSERT INTO academy_mcp_oauth_access_tokens(token,client_id,email,family_id,scopes,resource,grant_version,consented_at,expires_at)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,NOW()+INTERVAL '1 hour')`, [hashToken(access),row.client_id,row.email,family,grant.scopes,grant.resource,grant.grant_version,grant.consented_at]);
+  await db.query(`INSERT INTO academy_mcp_oauth_refresh_tokens(token,client_id,email,access_token,family_id,scopes,resource,grant_version,consented_at,expires_at)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW()+INTERVAL '30 days')`, [hashToken(refresh),row.client_id,row.email,hashToken(access),family,grant.scopes,grant.resource,grant.grant_version,grant.consented_at]);
+  return {access_token:access,refresh_token:refresh,token_type:"Bearer",expires_in:3600,scope:grant.scopes.join(" "),resource:grant.resource};
 }
-export function deleteRefreshTokenByHash(hash: string): void {
-  void getDb().query(`DELETE FROM academy_mcp_oauth_refresh_tokens WHERE token = $1`, [hash])
-    .catch((err: unknown) => warn("deleteRefreshTokenByHash", err));
+export async function redeemCode(form: URLSearchParams): Promise<ExchangeResult> {
+  return transaction(async db => {
+    const result = await db.query<CodeRow>("DELETE FROM academy_mcp_oauth_auth_codes WHERE code=$1 RETURNING *", [hashToken(form.get("code") ?? "")]);
+    const row = result.rows[0];
+    const verifier = form.get("code_verifier") ?? "";
+    if (!row || row.expires_at.getTime() <= Date.now() || row.client_id !== form.get("client_id") || row.redirect_uri !== form.get("redirect_uri") || !/^[A-Za-z0-9._~-]{43,128}$/.test(verifier)) return {ok:false,error:"invalid_grant"};
+    const challenge = createHash("sha256").update(verifier).digest("base64url");
+    if (challenge.length !== row.code_challenge.length || !timingSafeEqual(Buffer.from(challenge), Buffer.from(row.code_challenge))) return {ok:false,error:"invalid_grant"};
+    const grant = normalizeGrant(row);
+    if (form.has("resource") && form.get("resource") !== grant.resource) return {ok:false,error:"invalid_target"};
+    // The authorization-code exchange cannot expand or silently alter consent.
+    if (form.has("scope") && form.get("scope") !== grant.scopes.join(" ")) return {ok:false,error:"invalid_scope"};
+    const blocked = await db.query("SELECT 1 FROM academy_mcp_blocked WHERE email=$1", [row.email]);
+    if (blocked.rowCount) return {ok:false,error:"access_denied"};
+    return {ok:true,pair:await issuePair(db,row,grant,randomToken())};
+  });
 }
-
-export function saveMagicLink(token: string, v: PersistedMagicLink): void {
-  void getDb().query(
-    `INSERT INTO academy_mcp_oauth_magic_links (token, email, client_id, redirect_uri, state, code_challenge, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
-     ON CONFLICT (token) DO UPDATE SET expires_at = EXCLUDED.expires_at`,
-    [hashToken(token), v.email, v.client_id, v.redirect_uri, v.state, v.code_challenge, toIso(v.expires_at)],
-  ).catch((err: unknown) => warn("saveMagicLink", err));
+export async function rotateRefresh(form: URLSearchParams): Promise<ExchangeResult> {
+  const hash = hashToken(form.get("refresh_token") ?? "");
+  return transaction(async db => {
+    // A legacy NULL family is the paired ACCESS hash, matching browser revocation.
+    // Discover that stable lock key first, then re-read state UNDER that lock.
+    const candidate = await db.query<{family_id:string;client_id:string}>(`SELECT COALESCE(family_id,access_token) AS family_id,client_id FROM academy_mcp_oauth_refresh_tokens WHERE token=$1
+      UNION ALL SELECT family_id,client_id FROM academy_mcp_oauth_refresh_tombstones WHERE token=$1 LIMIT 1`, [hash]);
+    const family = candidate.rows[0];
+    if (!family || family.client_id !== form.get("client_id")) return {ok:false,error:"invalid_grant"};
+    await familyLock(db,family.family_id);
+    const tomb = await db.query("SELECT 1 FROM academy_mcp_oauth_refresh_tombstones WHERE token=$1", [hash]);
+    if (tomb.rowCount) { await revokeFamily(db,family.family_id); return {ok:false,error:"invalid_grant"}; }
+    const result = await db.query<TokenRow>("SELECT * FROM academy_mcp_oauth_refresh_tokens WHERE token=$1 FOR UPDATE", [hash]);
+    const row = result.rows[0];
+    const revoked = await db.query("SELECT 1 FROM academy_mcp_oauth_revoked_families WHERE family_id=$1", [family.family_id]);
+    if (!row || row.expires_at.getTime() <= Date.now() || revoked.rowCount) return {ok:false,error:"invalid_grant"};
+    let grant: Grant;
+    try { grant = narrowGrant(normalizeGrant(row),form.get("scope"),form.get("resource")); }
+    catch(error) { return {ok:false,error:error instanceof Error ? error.message : "invalid_scope"}; }
+    const blocked = await db.query("SELECT 1 FROM academy_mcp_blocked WHERE email=$1", [row.email]);
+    if (blocked.rowCount) { await revokeFamily(db,family.family_id); return {ok:false,error:"access_denied"}; }
+    await db.query("INSERT INTO academy_mcp_oauth_refresh_tombstones(token,family_id,client_id,expires_at) VALUES($1,$2,$3,$4)", [hash,family.family_id,row.client_id,row.expires_at]);
+    await db.query("DELETE FROM academy_mcp_oauth_access_tokens WHERE token=$1", [row.access_token]);
+    await db.query("DELETE FROM academy_mcp_oauth_refresh_tokens WHERE token=$1", [hash]);
+    return {ok:true,pair:await issuePair(db,row,grant,family.family_id)};
+  });
 }
-export function deleteMagicLinkByHash(hash: string): void {
-  void getDb().query(`DELETE FROM academy_mcp_oauth_magic_links WHERE token = $1`, [hash])
-    .catch((err: unknown) => warn("deleteMagicLinkByHash", err));
+export async function revokeToken(token: string, clientId: string): Promise<void> {
+  await transaction(async db => {
+    const hash = hashToken(token);
+    const result = await db.query<{family_id:string}>(`SELECT COALESCE(family_id,token) AS family_id FROM academy_mcp_oauth_access_tokens WHERE token=$1 AND client_id=$2
+      UNION ALL SELECT COALESCE(family_id,access_token) AS family_id FROM academy_mcp_oauth_refresh_tokens WHERE token=$1 AND client_id=$2
+      UNION ALL SELECT family_id FROM academy_mcp_oauth_refresh_tombstones WHERE token=$1 AND client_id=$2
+      UNION ALL SELECT family_id FROM academy_mcp_oauth_access_tokens WHERE family_id=$1 AND client_id=$2
+      UNION ALL SELECT family_id FROM academy_mcp_oauth_refresh_tombstones WHERE family_id=$1 AND client_id=$2 LIMIT 1`, [hash,clientId]);
+    const row = result.rows[0];
+    if (row) { await familyLock(db,row.family_id); await revokeFamily(db,row.family_id); }
+  });
 }
-
-export interface HydratedState {
-  clients: Array<[string, PersistedClient]>;
-  authCodes: Array<[string, PersistedAuthCode]>;
-  accessTokens: Array<[string, PersistedAccessToken]>;
-  refreshTokens: Array<[string, PersistedRefreshToken]>;
-  magicLinks: Array<[string, PersistedMagicLink]>;
+export interface Principal extends Grant { email: string; client_id: string; accessToken: string }
+export async function authenticateBearer(token: string, resource = MCP_RESOURCE): Promise<Principal | null> {
+  const result = await getDb().query<TokenRow>(`SELECT a.* FROM academy_mcp_oauth_access_tokens a WHERE token=$1 AND expires_at>NOW()
+    AND NOT EXISTS(SELECT 1 FROM academy_mcp_oauth_revoked_families f WHERE f.family_id=COALESCE(a.family_id,a.token))
+    AND NOT EXISTS(SELECT 1 FROM academy_mcp_blocked b WHERE b.email=a.email)`, [hashToken(token)]);
+  const row = result.rows[0];
+  if (!row) return null;
+  const grant = normalizeGrant(row);
+  return grant.resource === resource ? {...grant,email:row.email,client_id:row.client_id,accessToken:token} : null;
 }
-
-interface ClientRow { client_id: string; client_name: string; redirect_uris: unknown; created_at: string }
-interface AuthCodeRow { code: string; client_id: string; redirect_uri: string; code_challenge: string; email: string; expires_at: string }
-interface AccessTokenRow { token: string; client_id: string; email: string; family_id: string | null; created_at: string; expires_at: string }
-interface RefreshTokenRow { token: string; client_id: string; email: string; access_token: string; family_id: string | null; created_at: string; expires_at: string }
-interface MagicLinkRow { token: string; email: string; client_id: string; redirect_uri: string; state: string | null; code_challenge: string; expires_at: string }
-
-export async function loadOAuthStateFromDb(): Promise<HydratedState> {
-  const db = getDb();
-  const out: HydratedState = {
-    clients: [], authCodes: [], accessTokens: [], refreshTokens: [], magicLinks: [],
-  };
-  try {
-    const clients = await db.query<ClientRow>(`SELECT * FROM academy_mcp_oauth_clients`);
-    for (const r of clients.rows) {
-      const uris = Array.isArray(r.redirect_uris) ? r.redirect_uris as string[]
-        : typeof r.redirect_uris === "string" ? JSON.parse(r.redirect_uris) as string[] : [];
-      out.clients.push([r.client_id, {
-        client_id: r.client_id, client_name: r.client_name, redirect_uris: uris, created_at: Date.parse(r.created_at),
-      }]);
-    }
-    const authCodes = await db.query<AuthCodeRow>(`SELECT * FROM academy_mcp_oauth_auth_codes WHERE expires_at > NOW()`);
-    for (const r of authCodes.rows) {
-      out.authCodes.push([r.code, {
-        client_id: r.client_id, redirect_uri: r.redirect_uri, code_challenge: r.code_challenge,
-        email: r.email, expires_at: Date.parse(r.expires_at),
-      }]);
-    }
-    const accessTokens = await db.query<AccessTokenRow>(`SELECT * FROM academy_mcp_oauth_access_tokens WHERE expires_at > NOW()`);
-    for (const r of accessTokens.rows) {
-      out.accessTokens.push([r.token, {
-        client_id: r.client_id, email: r.email, family_id: r.family_id ?? undefined,
-        created_at: Date.parse(r.created_at), expires_at: Date.parse(r.expires_at),
-      }]);
-    }
-    const refreshTokens = await db.query<RefreshTokenRow>(`SELECT * FROM academy_mcp_oauth_refresh_tokens WHERE expires_at > NOW()`);
-    for (const r of refreshTokens.rows) {
-      out.refreshTokens.push([r.token, {
-        client_id: r.client_id, email: r.email, access_token: r.access_token,
-        family_id: r.family_id ?? undefined,
-        created_at: Date.parse(r.created_at), expires_at: Date.parse(r.expires_at),
-      }]);
-    }
-    const magicLinks = await db.query<MagicLinkRow>(`SELECT * FROM academy_mcp_oauth_magic_links WHERE expires_at > NOW()`);
-    for (const r of magicLinks.rows) {
-      out.magicLinks.push([r.token, {
-        email: r.email, client_id: r.client_id, redirect_uri: r.redirect_uri,
-        state: r.state ?? "", code_challenge: r.code_challenge, expires_at: Date.parse(r.expires_at),
-      }]);
-    }
-  } catch (err) {
-    // NICHT auf EMPTY zurueckfallen (Fable-R8, Finding 7). Vorher war ein
-    // gescheitertes Rehydrieren von „DB ist leer" nicht zu unterscheiden: der
-    // Aufrufer loggte danach `0 clients, 0 codes, 0 tokens` — wortgleich mit
-    // einem echten Frischstart. Ist die DB beim Boot kurz weg, waeren damit
-    // alle bestehenden Sitzungen still tot, jeder Kunde bekaeme 401, und
-    // /health meldete gruen. Ein Wurf hier bricht stattdessen den Start ab;
-    // `restart: unless-stopped` versucht es erneut, sobald die DB da ist.
-    warn("loadOAuthStateFromDb", err);
-    throw new Error(
-      `OAuth-State konnte nicht aus der DB geladen werden: ${(err as Error)?.message ?? err}`,
-    );
-  }
-  return out;
-}
-
 export async function cleanupExpiredOAuthState(): Promise<void> {
-  const db = getDb();
-  await Promise.all([
-    db.query(`DELETE FROM academy_mcp_oauth_auth_codes WHERE expires_at < NOW()`).catch((err: unknown) => warn("cleanup auth_codes", err)),
-    db.query(`DELETE FROM academy_mcp_oauth_access_tokens WHERE expires_at < NOW()`).catch((err: unknown) => warn("cleanup access_tokens", err)),
-    db.query(`DELETE FROM academy_mcp_oauth_refresh_tokens WHERE expires_at < NOW()`).catch((err: unknown) => warn("cleanup refresh_tokens", err)),
-    db.query(`DELETE FROM academy_mcp_oauth_magic_links WHERE expires_at < NOW()`).catch((err: unknown) => warn("cleanup magic_links", err)),
-  ]);
+  for (const [table,field] of [["auth_codes","expires_at"],["access_tokens","expires_at"],["refresh_tokens","expires_at"],["magic_links","expires_at"],["authorizations","expires_at"],["refresh_tombstones","expires_at"]] as const) {
+    await getDb().query(`DELETE FROM academy_mcp_oauth_${table} WHERE ${field}<NOW()`);
+  }
 }

@@ -38,10 +38,10 @@ const DICT: Record<Locale, Strings> = {
   de: {
     signin_title: "Bei der StudioMeyer Academy anmelden",
     signin_subtitle:
-      "Der Kurs merkt sich dann, wo du stehst — Fortschritt, Quiz, Wiederholung und Zertifikat. Der Lehrstoff selbst ist und bleibt kostenlos.",
+      "Der Kurs merkt sich dann, wo du stehst - Fortschritt, Quiz, Wiederholung und Zertifikat. Der Lehrstoff selbst ist und bleibt kostenlos.",
     permissions_header: "Dieser Client darf",
     permission_course: "Den Kurs in deiner KI lesen und mit ihr durcharbeiten",
-    permission_progress: "Deinen Fortschritt speichern — Lektionen, Quiz, Wiederholungen, Zertifikate",
+    permission_progress: "Deinen Fortschritt speichern - Lektionen, Quiz, Wiederholungen, Zertifikate",
     permission_tutor: "Den KI-Tutor zu Lektionen befragen",
     continue_with_google: "Mit Google anmelden",
     continue_with_discord: "Mit Discord anmelden",
@@ -62,10 +62,10 @@ const DICT: Record<Locale, Strings> = {
   en: {
     signin_title: "Sign in to StudioMeyer Academy",
     signin_subtitle:
-      "Connect your AI to your StudioMeyer modules — memory, CRM, AI visibility, expert team and academy, right in your chat.",
+      "Connect your AI to your StudioMeyer modules - memory, CRM, AI visibility, expert team and academy, right in your chat.",
     permissions_header: "This client will be able to",
     permission_course: "Read and work through the course inside your AI",
-    permission_progress: "Keep your progress — lessons, quizzes, review, certificates",
+    permission_progress: "Keep your progress - lessons, quizzes, review, certificates",
     permission_tutor: "Ask the AI tutor about a lesson",
     continue_with_google: "Continue with Google",
     continue_with_discord: "Continue with Discord",
@@ -86,10 +86,10 @@ const DICT: Record<Locale, Strings> = {
   es: {
     signin_title: "Entrar en StudioMeyer Academy",
     signin_subtitle:
-      "El curso recordara donde lo dejaste — progreso, cuestionarios, repaso y certificado. El material en si es y sigue siendo gratuito.",
+      "El curso recordara donde lo dejaste - progreso, cuestionarios, repaso y certificado. El material en si es y sigue siendo gratuito.",
     permissions_header: "Este cliente podra",
     permission_course: "Leer y seguir el curso dentro de tu IA",
-    permission_progress: "Guardar tu progreso — lecciones, cuestionarios, repaso, certificados",
+    permission_progress: "Guardar tu progreso - lecciones, cuestionarios, repaso, certificados",
     permission_tutor: "Preguntar al tutor de IA sobre una leccion",
     continue_with_google: "Continuar con Google",
     continue_with_discord: "Continuar con Discord",
@@ -114,7 +114,7 @@ const DICT: Record<Locale, Strings> = {
  * sonst "en". Robust gegen kaputte Header.
  */
 export function detectLocaleFromHeader(acceptLanguage: string | undefined): Locale {
-  if (!acceptLanguage) return "en";
+  if (!acceptLanguage) return "de";
   const tags = acceptLanguage
     .split(",")
     .map((t) => (t.trim().split(";")[0] ?? "").toLowerCase().split("-")[0] ?? "")
@@ -122,7 +122,7 @@ export function detectLocaleFromHeader(acceptLanguage: string | undefined): Loca
   for (const tag of tags) {
     if (LOCALES.includes(tag as Locale)) return tag as Locale;
   }
-  return "en";
+  return "de";
 }
 
 /** Locale aus dem Request: ?lang=de gewinnt, dann Accept-Language, dann en. */

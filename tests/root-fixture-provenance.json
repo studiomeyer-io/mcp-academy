@@ -1,0 +1,13 @@
+{
+  "source": "studiomeyer-io/academy",
+  "capture": "apiIndex(getAcademyOperations()) and normalizeLegacyInput() imported without executing service handlers or database queries",
+  "operationCount": 52,
+  "sourceSha256": {
+    "src/lib/academy/registry.ts": "c53d14327d5bb884d5e25c64f8c838c0324d9445885e2088c310c6d107dc7276",
+    "src/lib/academy/machine-docs.ts": "a8b4bfa3cfc37cd10bf677a921a80c7b7fa67d824bf3e7dc7ade9ed8cf7e3bce",
+    "src/lib/academy/aliases.ts": "4c599bd93548898e45cf3aa324e5f83e5e595d00a9f0f23389bc904b2e1a698c",
+    "src/lib/academy/commerce-operations.ts": "f5b8b5cb1c1554263c8338add487176ca385d7a9cf306f2bfe4fece7d7cb12e5",
+    "src/lib/academy/contracts.ts": "36ae5a63da71570617b2eac81a1ccb642a54c1b5a18c5aedf3874f5b6738ac35"
+  },
+  "fixtureSha256": "8d7fda401c7da7dee0f526d38b53449d24589bb185ef213b00dccd2f25dd97ad"
+}
