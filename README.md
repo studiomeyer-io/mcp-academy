@@ -25,9 +25,17 @@ Where authorization-server metadata advertises `agent_auth`, an agent can regist
 
 Requires Node.js 20 or newer. The hosted Docker image uses Node.js 22.
 
+Build the current implementation from source:
+
 ```bash
-npx -y mcp-academy
+git clone https://github.com/studiomeyer-io/mcp-academy.git
+cd mcp-academy
+npm ci
+npm run build
+node dist/index.js
 ```
+
+The npm package `mcp-academy` is still 0.4.1; repository and hosted server are 0.6.0. `npx -y mcp-academy` installs the older published package and does not provide the current live-default contract. No new npm version has been published.
 
 Default stdio is live and public. It requires network access to Academy. For Claude Desktop, Cursor or another stdio client:
 
@@ -35,8 +43,8 @@ Default stdio is live and public. It requires network access to Academy. For Cla
 {
   "mcpServers": {
     "academy": {
-      "command": "npx",
-      "args": ["-y", "mcp-academy"]
+      "command": "node",
+      "args": ["/absolute/path/to/mcp-academy/dist/index.js"]
     }
   }
 }
@@ -47,8 +55,8 @@ Start with `academy_start`. Tool names, result schemas, public/account visibilit
 For the preserved historical curriculum snapshot, explicitly opt in:
 
 ```bash
-npx -y mcp-academy --offline
-# Alternative: ACADEMY_OFFLINE=1 npx -y mcp-academy
+node dist/index.js --offline
+# Alternative: ACADEMY_OFFLINE=1 node dist/index.js
 ```
 
 The offline library is read-only, can be outdated and needs no network or account. Its old level names describe that snapshot, not today's live Academy. `ACADEMY_API_KEY` no longer grants personal access; existing configurations receive a migration notice. Use the hosted OAuth connection for personal tools.
@@ -106,12 +114,16 @@ npm run test:agent-protocol
 
 The DB tests require exactly `127.0.0.1:3431/academy_rebuild` and use synthetic `example.com` identities. They cover real transactions, restart, parallel redemption, refresh replay, narrowing, audience checks, revocation, browser binding and consent. Mail is replaced with a test transport. The SDK tests include a 52-operation index fixture imported from the actual Academy registry and real legacy-input normalization fixtures, with source hashes recorded in `tests/root-fixture-provenance.json`. They cover object-union credit results and personal zero-scope access. The SDK tests use a local mock Academy API; they do not claim a completed cross-repository integration or live deployment.
 
-The older `npm run smoke` script is retained unchanged as a historical contract check. Its implicit-offline, all-authenticated hosted and API-key expectations describe the previous product; `smoke:platform` verifies the rebuilt contract.
+`npm run smoke` and `npm run smoke:platform` both run the current live-default/explicit-offline CLI harness. `npm run smoke:legacy` retains the older historical harness; its implicit-offline, all-authenticated hosted and API-key expectations describe the previous product.
 
 The server code is MIT licensed. Content licensing comes from Academy's content/package metadata; this package does not establish new rights for Academy content.
 
 Implementation details, integration evidence and deployment boundaries: [agent platform contract](docs/claude/agent-platform.md).
 
-## Public tool-list choice
+## Optional focused docs entry
 
-The existing free tool list is preserved. The real registry fixture has 52 operations, 56 MCP names including aliases, and 29 public tools. Keeping it preserves installed clients and the learning workflow, while a docs-only scanner can still warn about size. A separate `search`/`fetch` docs endpoint would keep the current interface intact and offer a smaller discovery surface, but requires another endpoint with its own documented contract. Consolidating current tools would simplify selection but needs an explicit compatibility and migration decision. Neither alternative is implemented or advertised here. Every current output schema is independently compiled through the installed MCP SDK validator; no external `$ref` is required.
+The current checkout adds `https://mcp.studiomeyer.academy/mcp?access=docs` as an anonymous Streamable HTTP entry with exactly `search` and `fetch`. This addition is locally implemented and reviewed; production availability and an external Ora check still require deployment and verification. It does not change the existing `?access=free` entry, personal OAuth entry or declared legacy aliases. Academy discovery adds `docs_remote` separately; `public_remote` continues to point at `?access=free`.
+
+Docs mode rejects every other tool name with the existing JSON-RPC `-32602` / `not_found` error before execution. Search IDs can be passed to `fetch`, with the same public content/envelope as free mode. The existing three documentation resources remain available. Docs requests use the shared anonymous free/docs IP budget and never forward personal credentials.
+
+The archived registry fixture contains 52 operations, 56 MCP names including aliases and 29 public tools. The live registry snapshot checked on 2026-11-01 contains 53 operations, 29 public names and 28 personal names. Runtime `tools/list` remains authoritative. No tool was removed or renamed; every output schema remains self-contained.

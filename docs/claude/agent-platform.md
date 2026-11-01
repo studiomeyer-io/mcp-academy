@@ -42,7 +42,7 @@ A previous compatible deployment can read the still-present legacy columns, but 
 
 Default stdio now reads live. `--offline` or `ACADEMY_OFFLINE=1` explicitly retains the historical public bundle. It is described as a snapshot and never enables personal tools. Legacy learning/quiz aliases are declared by Academy for the compatibility version. Certificates, XP, rank, leagues and arena are dormant. The retained account facade accepts only a real validated OAuth grant for personal execution; API-key/email values grant no authority. API-key environment configurations receive an explicit migration notice.
 
-The historical smoke script remains unchanged and documents former assumptions. Current verification is `npm test`, `npm run smoke:platform` and `npm run test:auth-db` in addition to `npm run build`.
+The old assumptions are retained in `npm run smoke:legacy`. Both `npm run smoke` and `npm run smoke:platform` run the current built live-default/explicit-offline harness. Current verification also includes `npm test`, `npm run test:auth-db` and `npm run build`.
 
 ## Evidence and limits
 
@@ -160,3 +160,11 @@ MCP 0.6.0 and Academy are healthy on loopback 3221/3220 with 512/768 MiB caps. T
 The new full Ora domain audit is 96/100 A+, contract 1.38.0, scannedAt 2026-11-01T05:00:08.363Z, activeProbes=true, complete with no pending checks. Agent configs/plugins, agent-auth endpoint reachability and public MCP protocol errors pass. Ora's auth walkthrough is explicitly a static fallback, not a full interactive login test. The public 29-tool set remains for compatibility despite the docs-tool-count warning; all 56 output schemas compile in the local real SDK tests. No empty Web Bot Auth directory was published because this service is not an outgoing RFC 9421 crawler.
 
 The separately approved Academy Stripe webhook is technically connected while approved offers remain absent and purchases disabled. No real payment, message or learner write was performed. CI on Node 20 and 22 is green after the current built CLI smoke and SDK contract suite were wired into it. The five remaining GitHub security notifications refer to ranges already exceeded by the actual locked Nodemailer 10.3.1, ip-address 10.7.5, body-parser 2.4.0 and fast-uri 3.1.9; current production npm audit reports zero findings. Evidence: /home/simple/output/academy-payments-issues-2026-11-01/review.html and the linked raw reports. Production application source stays distinct from subsequent documentation-only commits.
+
+## Additive docs entry, locally prepared for issue #55
+
+The reviewed local change implements option C: `?access=docs` exposes exactly `search` and `fetch`, while `?access=free`, `public_remote` and OAuth remain unchanged. `src/core/docs-tools.ts` owns the allowlist, enforced by both listing and dispatch. Other tool names fail with JSON-RPC `-32602` and the existing `not_found` Academy envelope before execution. The docs server never reads/forwards personal identity. Public search/fetch and the existing three resources remain anonymous, sharing the existing free/docs IP budget.
+
+Independent local review returned GO for code, with nine public SDK tests and 23 Academy discovery tests passing. A separate actual-SDK/HTTP probe denied all 55 non-docs names in the current live-registry snapshot plus malformed variants and compared docs/free fetch envelopes in de/en/es. That registry has 53 operations, 29 public and 28 personal names; older 52/29/27 fixtures above remain historical evidence. The added docs_remote, developer text and llms entries are prepared locally. No legacy alias was removed or newly deprecated.
+
+This section does not certify production docs availability, an Ora result or npm publication. npm still serves 0.4.1; current source and the previously deployed hosted service are 0.6.0. Use a built source checkout for the current stdio contract. Deployment and external acceptance of this addition remain separate.
