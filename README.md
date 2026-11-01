@@ -100,3 +100,5 @@ The DB tests require exactly `127.0.0.1:3431/academy_rebuild` and use synthetic 
 The older `npm run smoke` script is retained unchanged as a historical contract check. Its implicit-offline, all-authenticated hosted and API-key expectations describe the previous product; `smoke:platform` verifies the rebuilt contract.
 
 The server code is MIT licensed. Content licensing comes from Academy's content/package metadata; this package does not establish new rights for Academy content.
+
+Implementation details, integration evidence and deployment boundaries: [agent platform contract](docs/claude/agent-platform.md).
