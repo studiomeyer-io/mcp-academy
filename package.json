@@ -51,21 +51,23 @@
     "ajv-formats": "^3.0.1"
   },
   "overrides": {
-    "@hono/node-server": "^2.1.5"
+    "@hono/node-server": "^2.1.5",
+    "js-yaml": {
+      "argparse": "2.0.1"
+    }
   },
   "devDependencies": {
-    "@types/node": "^22.20.2",
-    "@types/nodemailer": "^8.0.1",
+    "@types/node": "^22.20.5",
     "@types/pg": "^8.23.1",
     "gray-matter": "^4.0.3",
-    "tsx": "^4.23.13",
+    "tsx": "^4.23.15",
     "typescript": "^5.7.2"
   },
   "engines": {
     "node": ">=20.0.0"
   },
   "optionalDependencies": {
-    "pg": "^8.23.0",
+    "pg": "^8.23.1",
     "nodemailer": "^10.3.1"
   }
 }
