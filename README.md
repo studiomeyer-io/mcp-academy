@@ -35,7 +35,7 @@ npm run build
 node dist/index.js
 ```
 
-The npm package `mcp-academy` is still 0.4.1; repository and hosted server are 0.6.0. `npx -y mcp-academy` installs the older published package and does not provide the current live-default contract. No new npm version has been published.
+Version 0.6.0 is available as `mcp-academy@0.6.0`. Run `npx -y mcp-academy@0.6.0` for the live public stdio connection described below, or use the source installation above.
 
 Default stdio is live and public. It requires network access to Academy. For Claude Desktop, Cursor or another stdio client:
 
@@ -122,7 +122,7 @@ Implementation details, integration evidence and deployment boundaries: [agent p
 
 ## Optional focused docs entry
 
-The current checkout adds `https://mcp.studiomeyer.academy/mcp?access=docs` as an anonymous Streamable HTTP entry with exactly `search` and `fetch`. This addition is locally implemented and reviewed; production availability and an external Ora check still require deployment and verification. It does not change the existing `?access=free` entry, personal OAuth entry or declared legacy aliases. Academy discovery adds `docs_remote` separately; `public_remote` continues to point at `?access=free`.
+The hosted service provides `https://mcp.studiomeyer.academy/mcp?access=docs` as an optional anonymous Streamable HTTP entry with exactly `search` and `fetch`. It does not change the existing `?access=free` entry, personal OAuth entry or declared legacy aliases. Academy discovery adds `docs_remote` separately; `public_remote` continues to point at `?access=free`.
 
 Docs mode rejects every other tool name with the existing JSON-RPC `-32602` / `not_found` error before execution. Search IDs can be passed to `fetch`, with the same public content/envelope as free mode. The existing three documentation resources remain available. Docs requests use the shared anonymous free/docs IP budget and never forward personal credentials.
 

@@ -62,7 +62,7 @@ Rendered OAuth consent HTML was checked in de/en/es, including the unchecked spe
 
 ## Discovery version
 
-ServerInfo, npm metadata, plugin.json and server.json use 0.6.0; the offline server imports the same VERSION constant. Installed SDK: 1.32.2. Latest protocol: 2025-11-25. Supported protocols from SDK types.js: 2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05, 2024-10-07. No package was published.
+ServerInfo, npm metadata, plugin.json and server.json use 0.6.0; the offline server imports the same VERSION constant. Installed SDK: 1.32.2. Latest protocol: 2025-11-25. Supported protocols from SDK types.js: 2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05, 2024-10-07. The npm 0.6.0 archive was published on 2026-11-01 and anonymously retrieved with the approved SHA-256 cbc976ea9a5a3edbecb0ce927c4a8ddb15179a8e0df5c3fb0c6e7ca0b2386623: [exact registry artifact](https://registry.npmjs.org/mcp-academy/-/mcp-academy-0.6.0.tgz).
 
 ## Legacy family consistency and quote input unions
 
@@ -167,4 +167,13 @@ The reviewed local change implements option C: `?access=docs` exposes exactly `s
 
 Independent local review returned GO for code, with nine public SDK tests and 23 Academy discovery tests passing. A separate actual-SDK/HTTP probe denied all 55 non-docs names in the current live-registry snapshot plus malformed variants and compared docs/free fetch envelopes in de/en/es. That registry has 53 operations, 29 public and 28 personal names; older 52/29/27 fixtures above remain historical evidence. The added docs_remote, developer text and llms entries are prepared locally. No legacy alias was removed or newly deprecated.
 
-This section does not certify production docs availability, an Ora result or npm publication. npm still serves 0.4.1; current source and the previously deployed hosted service are 0.6.0. Use a built source checkout for the current stdio contract. Deployment and external acceptance of this addition remain separate.
+The published npm package now provides the 0.6.0 stdio contract via `npx -y mcp-academy@0.6.0`; the anonymous registry archive matches the approved artifact. This does not certify production availability of the additive docs entry or a new Ora result. Deployment and external acceptance of this addition remain separate.
+
+
+## Production acceptance on 2026-11-01
+
+After the explicit follow-up approval, the optional docs entry is live from MCP source `c047ac0ca037f8fd3bb13958be01fe95f8352772`, image `sha256:14246f9db627041fb4bfe9799fe5ca04482ed54d673ddd097a083b85b678712c`. The companion Academy app and jobs worker were built from `80c52c7b4c44e009e26a28066476d0168614184f` and both run image `sha256:4268d954b7d82cab789a6ebc3f78f578b0403e3b093f8ea4c8d54fa82cfb7de2`. The later concurrent Academy checkout `c7e6002a413fe37a7f8135c62d23ac50b15fd186` is separate from this image acceptance.
+
+Actual SDK reads verify exactly search/fetch in docs mode, the retained 29-tool free catalog and unauthenticated OAuth 401. Search/fetch content matches in de/en/es. Delivered discovery keeps public_remote on free and adds docs_remote. Six production Chromium views at 390/1280 pass translated content, 44px link targets, visible keyboard focus and overflow/JS checks; conditional ETags return 304. One Ora targeted check under contract 1.38.0 reports mcp-tool-listing pass 3/3 for the explicit docs URL, storedScanUpdated false. This does not establish an aggregate-score increase. No authenticated account write or credit transaction was performed.
+
+The npm 0.6.0 archive and latest MCP Registry version are independently read back. Permanent evidence: `/home/simple/output/oss-2026-11-01/`.
