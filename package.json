@@ -46,12 +46,12 @@
   },
   "homepage": "https://studiomeyer.academy",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1"
   },
   "overrides": {
-    "@hono/node-server": "^2.0.5"
+    "@hono/node-server": "^2.1.5"
   },
   "devDependencies": {
     "@types/node": "^22.20.2",
@@ -62,10 +62,10 @@
     "typescript": "^5.7.2"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "optionalDependencies": {
     "pg": "^8.23.0",
-    "nodemailer": "^9.1.1"
+    "nodemailer": "^10.3.1"
   }
 }

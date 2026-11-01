@@ -19,6 +19,8 @@ The protected endpoint returns `401` with OAuth discovery. Public clients use PK
 
 ## Local MCP clients
 
+Requires Node.js 20 or newer. The hosted Docker image uses Node.js 22.
+
 ```bash
 npx -y mcp-academy
 ```

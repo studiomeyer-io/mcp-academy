@@ -55,7 +55,7 @@ Rendered OAuth consent HTML was checked in de/en/es, including the unchecked spe
 ## Sources
 
 - [MCP authorization](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization)
-- [MCP TypeScript SDK v1](https://github.com/modelcontextprotocol/typescript-sdk/tree/v1.x), installed 1.30.0
+- [MCP TypeScript SDK v1](https://github.com/modelcontextprotocol/typescript-sdk/tree/v1.x), installed 1.32.2
 - [RFC 8707 resource indicators](https://www.rfc-editor.org/rfc/rfc8707.html)
 - [RFC 9700 OAuth security](https://www.rfc-editor.org/rfc/rfc9700.html)
 - [mcp-academy issue 48](https://github.com/studiomeyer-io/mcp-academy/issues/48)
@@ -63,7 +63,7 @@ Rendered OAuth consent HTML was checked in de/en/es, including the unchecked spe
 
 ## Discovery version
 
-ServerInfo, npm metadata and server.json use 0.5.0; the offline server imports the same VERSION constant. Installed SDK: 1.30.0. Latest protocol: 2025-11-25. Supported protocols from SDK types.js: 2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05, 2024-10-07. No package was published.
+ServerInfo, npm metadata and server.json use 0.5.0; the offline server imports the same VERSION constant. Installed SDK: 1.32.2. Latest protocol: 2025-11-25. Supported protocols from SDK types.js: 2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05, 2024-10-07. No package was published.
 
 ## Legacy family consistency and quote input unions
 
@@ -78,3 +78,26 @@ The actual v2-to-v3 runner was additionally tested against a populated v2 schema
 ## Integrated acceptance
 
 Root tested the built MCP 0.5.0 over real HTTP against the built shared Academy service with synthetic local PostgreSQL fixtures. Public and scope-filtered tool lists, private owner-bound notes, quote preparation, persisted browser approval, a single coaching debit on retry, immediate browser disconnect and legacy quiz-slug reads passed. Independent security and browser reviews returned GO for the tested local scope. Evidence: /home/simple/output/academy-platform-final-2026-11-01/review.html. No live purchase, npm publication or production rollout is implied. The regenerated real Root registry retains 52 operations and all three strict quiz input variants; SDK tests cover each without exposing solutions.
+
+## Production dependency security update
+
+The supplied production audit baseline contained 10 package findings: one critical, four high and five moderate. After targeted compatible updates and the explicitly approved Nodemailer major security fix, npm audit --omit=dev --json returned zero findings of every severity, exit 0. The full local JSON evidence is /tmp/mcp-academy-audit-after-update.json. No --force, audit suppression, application-source rewrite, deployment or publication was used.
+
+| Package | Before | After |
+|---|---|---|
+| @modelcontextprotocol/sdk | 1.30.0 | 1.32.2 |
+| @hono/node-server override | 2.1.1 | 2.1.5 |
+| nodemailer | 9.1.1 | 10.3.1 |
+| zod | 4.4.3 | 4.6.7 |
+| proxy-addr | 2.0.7 | 2.0.8 |
+| body-parser | 2.3.0 | 2.4.0 |
+| hono | 4.13.7 | 4.13.15 |
+| fast-uri | 3.1.7 | 3.1.9 |
+| ip-address | 10.5.0 | 10.7.5 |
+| qs | 6.16.0 | 6.17.1 |
+
+SDK and Hono ranges now start at the checked safe versions. Nodemailer 9 had no safe 9.x maintainer release; Root explicitly authorized 10.3.1 and the honest Node >=20 engine requirement. Dockerfile already uses node:22-slim, and verification ran on Node 22.22.1. Existing createTransport/sendMail calls remain unchanged. A real buffered streamTransport generated 2926 bytes of MIME for example.invalid through the existing sendMagicLinkEmail function, without SMTP or network delivery.
+
+All requested checks passed with the updated packages: npm test 5/5, npm run build exit 0, isolated OAuth database tests 10/10. Production audit is 0 critical, 0 high, 0 moderate, 0 low, 0 info. No source or test adjustment was necessary. SDK 1.32.2 retains the prior latest/supported protocol list recorded above, so this update introduces no protocol-version discovery change.
+
+Primary advisory references: https://github.com/advisories/GHSA-46jr-4wx8-v453 (SDK resource exhaustion), https://github.com/advisories/GHSA-rmxm-3fg6-px4f (Hono adapter), https://github.com/advisories/GHSA-jqcg-44mw-7w3h (proxy-addr), https://github.com/advisories/GHSA-mrhx-c7xc-m3w5 (Zod), https://github.com/advisories/GHSA-6vj9-mwq6-2f5v and https://github.com/advisories/GHSA-4ffr-jq9g-5ffx (Nodemailer). Version and engine constraints were checked against npm maintainer metadata.
