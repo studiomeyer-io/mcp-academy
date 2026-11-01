@@ -1,6 +1,6 @@
 # Academy MCP agent platform
 
-Implementation version: 0.6.0. No publication or deployment is implied.
+Implementation version: 0.6.0. PR #54 was merged and deployed on 2026-11-01; the final release verification below distinguishes historical local reports from the live result.
 Local implementation for mcp-academy#48 and Academy#12. This document describes the MCP checkout. Academy owns content, operation definitions, domain logic, pricing and package licensing. Root integration, independent acceptance and deployment remain separate steps.
 
 ## One live contract
@@ -149,3 +149,14 @@ Matthias explicitly authorized deployment of the new issue work and updates to d
 
 
 The first new CI run exposed the historical smoke entry still expecting the former offline-default server and a hard-coded version. The normal npm smoke command now uses the existing live-default/explicit-offline built CLI harness, reads the package version and expects -32602 for unknown tools. The historical harness remains available as smoke:legacy. CI also runs the current SDK contract suite before building and exercising the CLI. This changes verification wiring, not server permissions or runtime behavior.
+
+
+## Final production verification for PR #54
+
+Matthias explicitly approved merging Academy PR #18 and MCP PR #54 and then deploying both services. The resulting application sources are Academy 8e5bafaa3599e00071db666cd2375e0a2689b436 and MCP 3096c31413fa905173bede4eeea4ddd2a337fa86. Production pulled from GitHub and built images in the production checkouts. Schema 4 and all three new agent tables are verified after the fresh readable backup. Existing learner counts remain eleven users, eleven progress rows and four quiz attempts; commerce and tutor-job records remain zero. No production data was copied to development.
+
+MCP 0.6.0 and Academy are healthy on loopback 3221/3220 with 512/768 MiB caps. The dedicated persistent agent-assertion key and separate authenticated Academy job-worker keys were generated only on production. Public AS metadata advertises the real anonymous identity and claim routes, and the website auth.md follows after MCP deployment. No events endpoint or external issuer is advertised. Real external SDK initialization, 29 public tools, Spanish learning paths and -32602 protocol denial pass. The authenticated complete human-claim/account bridge was tested independently on local synthetic PostgreSQL with intercepted mail, not by creating a production test person.
+
+The new full Ora domain audit is 96/100 A+, contract 1.38.0, scannedAt 2026-11-01T05:00:08.363Z, activeProbes=true, complete with no pending checks. Agent configs/plugins, agent-auth endpoint reachability and public MCP protocol errors pass. Ora's auth walkthrough is explicitly a static fallback, not a full interactive login test. The public 29-tool set remains for compatibility despite the docs-tool-count warning; all 56 output schemas compile in the local real SDK tests. No empty Web Bot Auth directory was published because this service is not an outgoing RFC 9421 crawler.
+
+The separately approved Academy Stripe webhook is technically connected while approved offers remain absent and purchases disabled. No real payment, message or learner write was performed. CI on Node 20 and 22 is green after the current built CLI smoke and SDK contract suite were wired into it. The five remaining GitHub security notifications refer to ranges already exceeded by the actual locked Nodemailer 10.3.1, ip-address 10.7.5, body-parser 2.4.0 and fast-uri 3.1.9; current production npm audit reports zero findings. Evidence: /home/simple/output/academy-payments-issues-2026-11-01/review.html and the linked raw reports. Production application source stays distinct from subsequent documentation-only commits.
